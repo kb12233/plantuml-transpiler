@@ -35,7 +35,8 @@ class BaseGenerator {
       }
       
       // Generate entities without a package
-      this.generateEntitiesWithoutPackage(classDiagram, code);
+      // BUG FIX: We need to set code equal to the result of this function
+      code = this.generateEntitiesWithoutPackage(classDiagram, code);
     } else {
       // Generate all entities regardless of package
       for (const classObj of classDiagram.classes) {
