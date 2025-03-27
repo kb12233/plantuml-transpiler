@@ -16,7 +16,7 @@
     "diagrams"
   ],
   "author": "Karl Brandon B. Ocfemia",
-  "license": "ISC",
+  "license": "MIT",
   "devDependencies": {
     "@babel/cli": "^7.27.0",
     "@babel/core": "^7.26.10",
