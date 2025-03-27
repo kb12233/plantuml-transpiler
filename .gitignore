@@ -1,0 +1,81 @@
+# Dependency directories
+node_modules/
+jspm_packages/
+
+# Build outputs
+dist/
+build/
+lib/
+coverage/
+
+# Babel build directories
+.babel-cache/
+
+# Environment variables and configuration
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Cache directories
+.npm
+.eslintcache
+.stylelintcache
+.node_repl_history
+.cache/
+.yarn-cache/
+.parcel-cache/
+
+# Editor directories and files
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+*.sublime-project
+*.sublime-workspace
+*.iml
+.project
+.settings/
+.classpath
+.c9/
+*.launch
+.tern-project
+.editorconfig
+
+# OS generated files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.directory
+
+# Testing
+.nyc_output/
+coverage/
+.jest-cache
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# TypeScript
+*.tsbuildinfo
+
+# Misc
+.DS_Store
+.tmp/
+tmp/
+.history/
+.dynamodb/

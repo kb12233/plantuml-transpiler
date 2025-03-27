@@ -1,0 +1,29 @@
+{
+  "name": "plantuml-transpiler",
+  "version": "1.0.0",
+  "description": "A transpiler that converts PlantUML class diagrams to various programming languages",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "babel src -d dist",
+    "test": "jest",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "plantuml",
+    "transpiler",
+    "code-generation",
+    "uml",
+    "diagrams"
+  ],
+  "author": "Karl Brandon B. Ocfemia",
+  "license": "ISC",
+  "devDependencies": {
+    "@babel/cli": "^7.27.0",
+    "@babel/core": "^7.26.10",
+    "@babel/preset-env": "^7.26.9",
+    "jest": "^29.7.0"
+  },
+  "files": [
+    "dist"
+  ]
+}
