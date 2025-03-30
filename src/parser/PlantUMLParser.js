@@ -21,7 +21,8 @@ class PlantUMLParser {
     // Process each line
     let currentEntity = null;
     let inEntityDefinition = false;
-    let bracketCount = 0;
+    let packageBracketCount = 0; // Track package nesting level
+    let entityBracketCount = 0;  // Track entity nesting level separately
     
     const lines = plantUmlCode.split('\n');
     for (let i = 0; i < lines.length; i++) {
@@ -34,14 +35,16 @@ class PlantUMLParser {
         const packageMatch = line.match(/^package\s+"?([^"{}]+)"?\s*{?$/);
         if (packageMatch) {
           this.currentPackage = packageMatch[1].trim();
-          if (line.endsWith('{')) bracketCount++;
+          if (line.endsWith('{')) {
+            packageBracketCount++;
+          }
           diagram.packages[this.currentPackage] = [];
         }
       } 
-      // Check for end of package
-      else if (line === '}' && bracketCount > 0) {
-        bracketCount--;
-        if (bracketCount === 0) {
+      // Check for end of package - only if we're not inside an entity
+      else if (line === '}' && !inEntityDefinition && packageBracketCount > 0) {
+        packageBracketCount--;
+        if (packageBracketCount === 0) {
           this.currentPackage = null;
         }
       }
@@ -60,15 +63,22 @@ class PlantUMLParser {
           
           // Check if the definition continues on the same line
           if (line.includes('{')) {
-            bracketCount++;
+            entityBracketCount++;
           }
         }
       }
       // Check for end of entity definition
-      else if (inEntityDefinition && line === '}') {
-        inEntityDefinition = false;
-        currentEntity = null;
-        bracketCount--;
+      else if (line === '}' && inEntityDefinition) {
+        // Decrement entity bracket count
+        if (entityBracketCount > 0) {
+          entityBracketCount--;
+        }
+        
+        // If entity bracket count reaches 0, we're done with the entity
+        if (entityBracketCount === 0) {
+          inEntityDefinition = false;
+          currentEntity = null;
+        }
       }
       // Check for attribute or method inside entity definition
       else if (inEntityDefinition && currentEntity) {
@@ -85,8 +95,8 @@ class PlantUMLParser {
           }
         }
       }
-      // Check for relationship
-      else if (this.isRelationship(line)) {
+      // Check for relationship - only if we're not inside an entity
+      else if (!inEntityDefinition && this.isRelationship(line)) {
         const relationship = this.parseRelationship(line);
         if (relationship) {
           diagram.relationships.push(relationship);
@@ -262,21 +272,24 @@ class PlantUMLParser {
   isRelationship(line) {
     return (
       line.includes('<|--') || // inheritance
+      line.includes('--|>') || // inheritance (reverse)
       line.includes('<|..') || // implementation
+      line.includes('..|>') || // implementation (reverse)
       line.includes('-->') ||  // association
+      line.includes('<--') ||  // reverse association
       line.includes('o-->') || // aggregation
+      line.includes('<--o') || // reverse aggregation
       line.includes('*-->') || // composition
+      line.includes('<--*') || // reverse composition
       line.includes('..>') ||  // dependency
+      line.includes('<..') ||  // reverse dependency
       line.includes('-->')     // simple association
     );
   }
   
   parseRelationship(line) {
-    // Extract relationship parts (handle labels too)
-    const parts = line.split(/\s+/);
-    let sourceClass, targetClass, type, label = '';
-    
     // Extract label if present (in quotes)
+    let label = '';
     const labelMatch = line.match(/"([^"]+)"/);
     if (labelMatch) {
       label = labelMatch[1];
@@ -284,58 +297,126 @@ class PlantUMLParser {
       line = line.replace(/"[^"]+"\s*/, '');
     }
     
-    // Check relationship type
+    // Clean up the line
+    line = line.trim();
+    
+    let sourceClass, targetClass, type;
+    
+    // Try different relationship patterns
+    
+    // Inheritance: Child <|-- Parent
     if (line.includes('<|--')) {
-      // Inheritance: Child <|-- Parent
-      const match = line.match(/(\w+)\s+<\|--\s+(\w+)/);
-      if (match) {
-        sourceClass = match[1]; // Child
-        targetClass = match[2]; // Parent
+      const parts = line.split('<|--').map(part => part.trim());
+      if (parts.length === 2) {
+        sourceClass = parts[0];
+        targetClass = parts[1];
         type = 'inheritance';
       }
-    } else if (line.includes('<|..')) {
-      // Implementation: Class <|.. Interface
-      const match = line.match(/(\w+)\s+<\|\.\.+\s+(\w+)/);
-      if (match) {
-        sourceClass = match[1]; // Class
-        targetClass = match[2]; // Interface
+    } 
+    // Inheritance (reverse): Parent --|> Child
+    else if (line.includes('--|>')) {
+      const parts = line.split('--|>').map(part => part.trim());
+      if (parts.length === 2) {
+        sourceClass = parts[1]; // Swap to maintain semantics
+        targetClass = parts[0];
+        type = 'inheritance';
+      }
+    }
+    // Implementation: Class <|.. Interface
+    else if (line.includes('<|..')) {
+      const parts = line.split('<|..').map(part => part.trim());
+      if (parts.length === 2) {
+        sourceClass = parts[0];
+        targetClass = parts[1];
         type = 'implementation';
       }
-    } else if (line.includes('o-->')) {
-      // Aggregation: Container o--> Element
-      const match = line.match(/(\w+)\s+o-->\s+(\w+)/);
-      if (match) {
-        sourceClass = match[1]; // Container
-        targetClass = match[2]; // Element
-        type = 'aggregation';
+    }
+    // Implementation (reverse): Interface ..|> Class
+    else if (line.includes('..|>')) {
+      const parts = line.split('..|>').map(part => part.trim());
+      if (parts.length === 2) {
+        sourceClass = parts[1]; // Swap to maintain semantics
+        targetClass = parts[0];
+        type = 'implementation';
       }
-    } else if (line.includes('*-->')) {
-      // Composition: Container *--> Element
-      const match = line.match(/(\w+)\s+\*-->\s+(\w+)/);
-      if (match) {
-        sourceClass = match[1]; // Container
-        targetClass = match[2]; // Element
-        type = 'composition';
-      }
-    } else if (line.includes('..>')) {
-      // Dependency: User ..> Service
-      const match = line.match(/(\w+)\s+\.\.>\s+(\w+)/);
-      if (match) {
-        sourceClass = match[1]; // User
-        targetClass = match[2]; // Service
+    }
+    // Dependency: User ..> Service
+    else if (line.includes('..>')) {
+      const parts = line.split('..>').map(part => part.trim());
+      if (parts.length === 2) {
+        sourceClass = parts[0];
+        targetClass = parts[1];
         type = 'dependency';
       }
-    } else if (line.includes('-->')) {
-      // Association: Class --> OtherClass
-      const match = line.match(/(\w+)\s+-->\s+(\w+)/);
-      if (match) {
-        sourceClass = match[1];
-        targetClass = match[2];
+    }
+    // Reverse Dependency: Service <.. User
+    else if (line.includes('<..')) {
+      const parts = line.split('<..').map(part => part.trim());
+      if (parts.length === 2) {
+        sourceClass = parts[1]; // Swap to maintain semantics
+        targetClass = parts[0];
+        type = 'dependency';
+      }
+    }
+    // Association: Class --> OtherClass
+    else if (line.includes('-->')) {
+      const parts = line.split('-->').map(part => part.trim());
+      if (parts.length === 2) {
+        sourceClass = parts[0];
+        targetClass = parts[1];
         type = 'association';
+      }
+    }
+    // Reverse Association: OtherClass <-- Class
+    else if (line.includes('<--')) {
+      const parts = line.split('<--').map(part => part.trim());
+      if (parts.length === 2) {
+        sourceClass = parts[1]; // Swap to maintain semantics
+        targetClass = parts[0];
+        type = 'association';
+      }
+    }
+    // Aggregation: Container o--> Element
+    else if (line.includes('o-->')) {
+      const parts = line.split('o-->').map(part => part.trim());
+      if (parts.length === 2) {
+        sourceClass = parts[0];
+        targetClass = parts[1];
+        type = 'aggregation';
+      }
+    }
+    // Reverse Aggregation: Element <--o Container
+    else if (line.includes('<--o')) {
+      const parts = line.split('<--o').map(part => part.trim());
+      if (parts.length === 2) {
+        sourceClass = parts[1]; // Swap to maintain semantics
+        targetClass = parts[0];
+        type = 'aggregation';
+      }
+    }
+    // Composition: Container *--> Element
+    else if (line.includes('*-->')) {
+      const parts = line.split('*-->').map(part => part.trim());
+      if (parts.length === 2) {
+        sourceClass = parts[0];
+        targetClass = parts[1];
+        type = 'composition';
+      }
+    }
+    // Reverse Composition: Element <--* Container
+    else if (line.includes('<--*')) {
+      const parts = line.split('<--*').map(part => part.trim());
+      if (parts.length === 2) {
+        sourceClass = parts[1]; // Swap to maintain semantics
+        targetClass = parts[0];
+        type = 'composition';
       }
     }
     
     if (sourceClass && targetClass && type) {
+      // Clean up any extra whitespace or characters
+      sourceClass = sourceClass.replace(/\s+/g, '');
+      targetClass = targetClass.replace(/\s+/g, '');
       return new Relationship(sourceClass, targetClass, type, label);
     }
     

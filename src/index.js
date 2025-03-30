@@ -42,6 +42,8 @@ class PlantUMLTranspiler {
     console.log(`Transpiling to ${language}`);
     console.log(`Found ${classDiagram.classes.length} classes`);
     console.log(`Found ${classDiagram.interfaces.length} interfaces`);
+    console.log(`Found ${classDiagram.enums.length} enums`);
+    console.log(`Found ${classDiagram.relationships.length} relationships`);
     
     // Generate code for the target language
     return this.generators[language].generate(classDiagram);

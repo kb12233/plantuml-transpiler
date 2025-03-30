@@ -161,18 +161,18 @@ class RubyGenerator extends BaseGenerator {
     if (instanceMethods.length > 0) {
       for (const method of instanceMethods) {
         // Method documentation
-        code += this.indent(`# ${method.name} method`);
+        code += this.indent(`# ${method.name} method` + '\n');
         
         // Method parameters documentation
         if (method.parameters.length > 0) {
           for (const param of method.parameters) {
-            code += this.indent(`# @param ${param.name} [${param.type}]`);
+            code += this.indent(`# @param ${param.name} [${param.type}]`) + '\n';
           }
         }
         
         // Return type documentation
         if (method.returnType !== 'void') {
-          code += this.indent(`# @return [${method.returnType}]`);
+          code += this.indent(`# @return [${method.returnType}]`) + '\n';
         }
         
         // Method visibility

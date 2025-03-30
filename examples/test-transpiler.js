@@ -3,19 +3,39 @@ const PlantUMLTranspiler = require('../src/index');
 // Create sample PlantUML diagram
 const plantUmlCode = `
 @startuml
-class User {
-  -id: int
-  -name: String
-  +getId(): int
-  +setName(name: String): void
+package packageName {
+  class User<yoooo> {
+    -id: int
+    -name: String
+    +getId(): int
+    +setName(name: String): void
+    +User(id: int, name: String)
+  }
+
+  class NormalUser {
+    -email: String
+    +getEmail(): String
+    +setEmail(email: String): void
+    +NormalUser(id: int, name: String, email: String)
+  }
+
+  enum TimeUnit {
+    DAYS
+    HOURS
+    MINUTES
+  }
 }
 
-interface UserService {
-  +findById(id: int): User
-  +save(user: User): void
+package anotherOne {
+  interface UserService {
+    +findById(id: int): User
+    +save(user: User): void
+  }
 }
+
 
 User <.. UserService
+User <|-- NormalUser
 @enduml
 `;
 
@@ -27,16 +47,37 @@ console.log("PARSED DIAGRAM:", JSON.stringify(classDiagram, null, 2));
 // Initialize transpiler
 const transpiler = new PlantUMLTranspiler();
 
-// Test each language
-console.log("Supported languages:", transpiler.getSupportedLanguages());
 
-// Generate and display code for each language
-transpiler.getSupportedLanguages().forEach(language => {
-  console.log(`\n\n---------- ${language.toUpperCase()} CODE ----------`);
-  try {
-    const code = transpiler.transpile(plantUmlCode, language);
-    console.log(code);
-  } catch (err) {
-    console.error(`Error generating ${language} code:`, err);
-  }
-});
+// // Generate and display code for each language
+// // Uncomment the following lines to test all supported languages
+// console.log("Supported languages:", transpiler.getSupportedLanguages());
+// transpiler.getSupportedLanguages().forEach(language => {
+//   console.log(`\n\n---------- ${language.toUpperCase()} CODE ----------`);
+//   try {
+//     const code = transpiler.transpile(plantUmlCode, language);
+//     console.log(code);
+//   } catch (err) {
+//     console.error(`Error generating ${language} code:`, err);
+//   }
+// });
+
+
+// Test a specific language
+// Supported languages: [
+//   'java',
+//   'csharp',
+//   'python',
+//   'ruby',
+//   'kotlin',
+//   'javascript',
+//   'typescript'
+// ]
+console.log("Supported languages:", transpiler.getSupportedLanguages());
+const language = 'java'; // Change this to test other languages
+console.log(`\n\n---------- ${language.toUpperCase()} CODE ----------`);
+try {
+  const code = transpiler.transpile(plantUmlCode, language);
+  console.log(code);
+} catch (err) {
+  console.error(`Error generating ${language} code:`, err);
+}
