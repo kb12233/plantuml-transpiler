@@ -173,18 +173,26 @@ class PlantUMLParser {
   
   isMemberDefinition(line) {
     // Check if line defines a member (attribute or method)
-    return line.match(/^\s*[+\-#~]/) !== null;
+    // This matches members with visibility modifiers (+, -, #, ~)
+    // or members without visibility modifiers, including those starting with modifiers
+    return line.match(/^\s*([+\-#~]|\{[\w]+\}|\w+\s*:|\w+\s*\()/) !== null;
   }
   
   parseMember(line, entity) {
     // Remove leading/trailing spaces and the opening/closing curly braces if present
     line = line.trim().replace(/\s*\{\s*$/, '');
     
-    // Check if it's a constructor
-    const constructorMatch = line.match(/^\s*([\+\-#~])\s*(\w+)\s*\((.*?)\)\s*$/);
-    if (constructorMatch && constructorMatch[2] === entity.name) {
-      const visibility = this.parseVisibility(constructorMatch[1]);
-      const parameters = this.parseParameters(constructorMatch[3]);
+    // Get all modifiers from line - enhanced to support multiple modifiers
+    const modifiers = this.extractModifiers(line);
+    
+    // Remove modifiers from line for cleaner parsing
+    let cleanedLine = this.removeModifiers(line);
+    
+    // First, check if it's a constructor (with or without visibility modifier)
+    const constructorWithVisibilityMatch = cleanedLine.match(/^\s*([\+\-#~])\s*(\w+)\s*\((.*?)\)\s*$/);
+    if (constructorWithVisibilityMatch && constructorWithVisibilityMatch[2] === entity.name) {
+      const visibility = this.parseVisibility(constructorWithVisibilityMatch[1]);
+      const parameters = this.parseParameters(constructorWithVisibilityMatch[3]);
       
       const constructor = new Method(entity.name, null, parameters, visibility);
       if (entity.constructors) {
@@ -193,19 +201,27 @@ class PlantUMLParser {
       return;
     }
     
-    // Get all modifiers from line - enhanced to support multiple modifiers
-    const modifiers = this.extractModifiers(line);
+    // Check for constructor without visibility modifier
+    const constructorWithoutVisibilityMatch = cleanedLine.match(/^\s*(\w+)\s*\((.*?)\)\s*$/);
+    if (constructorWithoutVisibilityMatch && constructorWithoutVisibilityMatch[1] === entity.name) {
+      // Default visibility for constructors is public in many languages
+      const visibility = 'public';
+      const parameters = this.parseParameters(constructorWithoutVisibilityMatch[2]);
+      
+      const constructor = new Method(entity.name, null, parameters, visibility);
+      if (entity.constructors) {
+        entity.constructors.push(constructor);
+      }
+      return;
+    }
     
-    // Remove modifiers from line for cleaner parsing
-    let cleanedLine = this.removeModifiers(line);
-    
-    // Check if it's a method
-    const methodMatch = cleanedLine.match(/^\s*([\+\-#~])\s*(\w+)\s*\((.*?)\)(?:\s*:\s*(\w+(?:<.*>)?))?/);
-    if (methodMatch) {
-      const visibility = this.parseVisibility(methodMatch[1]);
-      const name = methodMatch[2];
-      const parameters = this.parseParameters(methodMatch[3]);
-      const returnType = methodMatch[4] || 'void';
+    // Check if it's a method with visibility modifier
+    const methodWithVisibilityMatch = cleanedLine.match(/^\s*([\+\-#~])\s*(\w+)\s*\((.*?)\)(?:\s*:\s*(\w+(?:<.*>)?))?/);
+    if (methodWithVisibilityMatch) {
+      const visibility = this.parseVisibility(methodWithVisibilityMatch[1]);
+      const name = methodWithVisibilityMatch[2];
+      const parameters = this.parseParameters(methodWithVisibilityMatch[3]);
+      const returnType = methodWithVisibilityMatch[4] || 'void';
       
       // Apply modifiers
       const isAbstract = modifiers.includes('abstract');
@@ -216,12 +232,30 @@ class PlantUMLParser {
       return;
     }
     
-    // Check if it's an attribute
-    const attributeMatch = cleanedLine.match(/^\s*([\+\-#~])\s*(\w+)(?:\s*:\s*(\w+(?:<.*>)?))?/);
-    if (attributeMatch && entity.attributes) {
-      const visibility = this.parseVisibility(attributeMatch[1]);
-      const name = attributeMatch[2];
-      const type = attributeMatch[3] || 'Object';
+    // Check if it's a method without visibility modifier
+    const methodWithoutVisibilityMatch = cleanedLine.match(/^\s*(\w+)\s*\((.*?)\)(?:\s*:\s*(\w+(?:<.*>)?))?/);
+    if (methodWithoutVisibilityMatch && cleanedLine.trim() !== '') {
+      // Default visibility for methods without modifiers is public in PlantUML
+      const visibility = 'public';
+      const name = methodWithoutVisibilityMatch[1];
+      const parameters = this.parseParameters(methodWithoutVisibilityMatch[2]);
+      const returnType = methodWithoutVisibilityMatch[3] || 'void';
+      
+      // Apply modifiers
+      const isAbstract = modifiers.includes('abstract');
+      const isStatic = modifiers.includes('static');
+      
+      const method = new Method(name, returnType, parameters, visibility, isStatic, isAbstract);
+      entity.methods.push(method);
+      return;
+    }
+    
+    // Check if it's an attribute with visibility modifier
+    const attributeWithVisibilityMatch = cleanedLine.match(/^\s*([\+\-#~])\s*(\w+)(?:\s*:\s*(\w+(?:<.*>)?))?/);
+    if (attributeWithVisibilityMatch && entity.attributes) {
+      const visibility = this.parseVisibility(attributeWithVisibilityMatch[1]);
+      const name = attributeWithVisibilityMatch[2];
+      const type = attributeWithVisibilityMatch[3] || 'Object';
       
       // Apply modifiers
       const isStatic = modifiers.includes('static');
@@ -229,6 +263,25 @@ class PlantUMLParser {
       
       const attribute = new Attribute(name, type, visibility, isStatic, isFinal);
       entity.attributes.push(attribute);
+      return;
+    }
+    
+    // Check if it's an attribute without visibility modifier
+    // This must be a non-empty line after removing modifiers
+    const attributeWithoutVisibilityMatch = cleanedLine.match(/^\s*(\w+)(?:\s*:\s*(\w+(?:<.*>)?))?/);
+    if (attributeWithoutVisibilityMatch && entity.attributes && cleanedLine.trim() !== '') {
+      // Default visibility for attributes without modifiers is public in PlantUML
+      const visibility = 'public';
+      const name = attributeWithoutVisibilityMatch[1];
+      const type = attributeWithoutVisibilityMatch[2] || 'Object';
+      
+      // Apply modifiers
+      const isStatic = modifiers.includes('static');
+      const isFinal = modifiers.includes('final');
+      
+      const attribute = new Attribute(name, type, visibility, isStatic, isFinal);
+      entity.attributes.push(attribute);
+      return;
     }
   }
   
@@ -330,38 +383,38 @@ class PlantUMLParser {
     
     // Try different relationship patterns
     
-    // Inheritance: Child <|-- Parent
-    if (line.includes('<|--')) {
-      const parts = line.split('<|--').map(part => part.trim());
+    // Inheritance: Child --|> Parent
+    if (line.includes('--|>')) {
+      const parts = line.split('--|>').map(part => part.trim());
       if (parts.length === 2) {
         sourceClass = parts[0];
         targetClass = parts[1];
         type = 'inheritance';
       }
-    } 
-    // Inheritance (reverse): Parent --|> Child
-    else if (line.includes('--|>')) {
-      const parts = line.split('--|>').map(part => part.trim());
+    }
+    // Inheritance (reverse): Parent <|-- Child
+    else if (line.includes('<|--')) {
+      const parts = line.split('<|--').map(part => part.trim());
       if (parts.length === 2) {
-        sourceClass = parts[1]; // Swap to maintain semantics
+        sourceClass = parts[1]; // Swap to maintain consistent source->target semantics
         targetClass = parts[0];
         type = 'inheritance';
       }
     }
-    // Implementation: Class <|.. Interface
-    else if (line.includes('<|..')) {
-      const parts = line.split('<|..').map(part => part.trim());
+    // Implementation: Class --|> Interface (using dashed line)
+    else if (line.includes('..|>')) {
+      const parts = line.split('..|>').map(part => part.trim());
       if (parts.length === 2) {
         sourceClass = parts[0];
         targetClass = parts[1];
         type = 'implementation';
       }
     }
-    // Implementation (reverse): Interface ..|> Class
-    else if (line.includes('..|>')) {
-      const parts = line.split('..|>').map(part => part.trim());
+    // Implementation (reverse): Interface <|.. Class
+    else if (line.includes('<|..')) {
+      const parts = line.split('<|..').map(part => part.trim());
       if (parts.length === 2) {
-        sourceClass = parts[1]; // Swap to maintain semantics
+        sourceClass = parts[1]; // Swap to maintain consistent source->target semantics
         targetClass = parts[0];
         type = 'implementation';
       }
@@ -379,7 +432,7 @@ class PlantUMLParser {
     else if (line.includes('<..')) {
       const parts = line.split('<..').map(part => part.trim());
       if (parts.length === 2) {
-        sourceClass = parts[1]; // Swap to maintain semantics
+        sourceClass = parts[1]; // Swap to maintain consistent source->target semantics
         targetClass = parts[0];
         type = 'dependency';
       }
@@ -397,7 +450,7 @@ class PlantUMLParser {
     else if (line.includes('<--')) {
       const parts = line.split('<--').map(part => part.trim());
       if (parts.length === 2) {
-        sourceClass = parts[1]; // Swap to maintain semantics
+        sourceClass = parts[1]; // Swap to maintain consistent source->target semantics
         targetClass = parts[0];
         type = 'association';
       }
@@ -415,7 +468,7 @@ class PlantUMLParser {
     else if (line.includes('<--o')) {
       const parts = line.split('<--o').map(part => part.trim());
       if (parts.length === 2) {
-        sourceClass = parts[1]; // Swap to maintain semantics
+        sourceClass = parts[1]; // Swap to maintain consistent source->target semantics
         targetClass = parts[0];
         type = 'aggregation';
       }
@@ -433,7 +486,7 @@ class PlantUMLParser {
     else if (line.includes('<--*')) {
       const parts = line.split('<--*').map(part => part.trim());
       if (parts.length === 2) {
-        sourceClass = parts[1]; // Swap to maintain semantics
+        sourceClass = parts[1]; // Swap to maintain consistent source->target semantics
         targetClass = parts[0];
         type = 'composition';
       }

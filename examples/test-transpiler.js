@@ -5,9 +5,9 @@ const plantUmlCode = `
 @startuml
 package packageName {
   class User<yoooo> {
-    - {final} id: int
-    - name: String
-    + {static} {abstract} getId(): int
+    {final} id: int
+    name: String
+    {static} {abstract} getId(): int
     + {static} setName(name: String): void
     +User(id: int, name: String)
   }
@@ -73,7 +73,7 @@ const transpiler = new PlantUMLTranspiler();
 //   'typescript'
 // ]
 console.log("Supported languages:", transpiler.getSupportedLanguages());
-const language = 'java'; // Change this to test other languages
+const language = 'kotlin'; // Change this to test other languages
 console.log(`\n\n---------- ${language.toUpperCase()} CODE ----------`);
 try {
   const code = transpiler.transpile(plantUmlCode, language);
