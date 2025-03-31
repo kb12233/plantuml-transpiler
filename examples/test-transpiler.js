@@ -5,16 +5,16 @@ const plantUmlCode = `
 @startuml
 package packageName {
   class User<yoooo> {
-    -id: int
-    -name: String
-    +getId(): int
-    +setName(name: String): void
+    - {final} id: int
+    - name: String
+    + {static} {abstract} getId(): int
+    + {static} setName(name: String): void
     +User(id: int, name: String)
   }
 
   class NormalUser {
-    -email: String
-    +getEmail(): String
+    - {static} {final} email: String
+    + {abstract} getEmail(): String
     +setEmail(email: String): void
     +NormalUser(id: int, name: String, email: String)
   }

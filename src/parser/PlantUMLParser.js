@@ -193,16 +193,23 @@ class PlantUMLParser {
       return;
     }
     
+    // Get all modifiers from line - enhanced to support multiple modifiers
+    const modifiers = this.extractModifiers(line);
+    
+    // Remove modifiers from line for cleaner parsing
+    let cleanedLine = this.removeModifiers(line);
+    
     // Check if it's a method
-    const methodMatch = line.match(/^\s*([\+\-#~])(?:\s*\{(abstract|static)\})?\s*(\w+)\s*\((.*?)\)(?:\s*:\s*(\w+(?:<.*>)?))?/);
+    const methodMatch = cleanedLine.match(/^\s*([\+\-#~])\s*(\w+)\s*\((.*?)\)(?:\s*:\s*(\w+(?:<.*>)?))?/);
     if (methodMatch) {
       const visibility = this.parseVisibility(methodMatch[1]);
-      const modifier = methodMatch[2] || '';
-      const isAbstract = modifier === 'abstract';
-      const isStatic = modifier === 'static';
-      const name = methodMatch[3];
-      const parameters = this.parseParameters(methodMatch[4]);
-      const returnType = methodMatch[5] || 'void';
+      const name = methodMatch[2];
+      const parameters = this.parseParameters(methodMatch[3]);
+      const returnType = methodMatch[4] || 'void';
+      
+      // Apply modifiers
+      const isAbstract = modifiers.includes('abstract');
+      const isStatic = modifiers.includes('static');
       
       const method = new Method(name, returnType, parameters, visibility, isStatic, isAbstract);
       entity.methods.push(method);
@@ -210,18 +217,37 @@ class PlantUMLParser {
     }
     
     // Check if it's an attribute
-    const attributeMatch = line.match(/^\s*([\+\-#~])(?:\s*\{(static|final)\})?\s*(\w+)(?:\s*:\s*(\w+(?:<.*>)?))?/);
+    const attributeMatch = cleanedLine.match(/^\s*([\+\-#~])\s*(\w+)(?:\s*:\s*(\w+(?:<.*>)?))?/);
     if (attributeMatch && entity.attributes) {
       const visibility = this.parseVisibility(attributeMatch[1]);
-      const modifier = attributeMatch[2] || '';
-      const isStatic = modifier === 'static';
-      const isFinal = modifier === 'final';
-      const name = attributeMatch[3];
-      const type = attributeMatch[4] || 'Object';
+      const name = attributeMatch[2];
+      const type = attributeMatch[3] || 'Object';
+      
+      // Apply modifiers
+      const isStatic = modifiers.includes('static');
+      const isFinal = modifiers.includes('final');
       
       const attribute = new Attribute(name, type, visibility, isStatic, isFinal);
       entity.attributes.push(attribute);
     }
+  }
+  
+  // New method to extract all modifiers from a line
+  extractModifiers(line) {
+    const modifiers = [];
+    const modifierRegex = /\{(\w+)\}/g;
+    let match;
+    
+    while ((match = modifierRegex.exec(line)) !== null) {
+      modifiers.push(match[1]);
+    }
+    
+    return modifiers;
+  }
+  
+  // New method to remove all modifier blocks from a line
+  removeModifiers(line) {
+    return line.replace(/\{\w+\}/g, '');
   }
   
   parseVisibility(symbol) {
