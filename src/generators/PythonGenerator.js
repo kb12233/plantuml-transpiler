@@ -121,14 +121,25 @@ class PythonGenerator extends BaseGenerator {
       if (method.parameters.length > 0) {
         code += this.indent('Args:', 2) + '\n';
         for (const param of method.parameters) {
-          code += this.indent('    ' + param.name + ': A ' + param.type, 2) + '\n';
+          const mappedType = this.mapPythonType(param.type);
+          if (this.isComplexGenericType(param.type)) {
+            code += this.indent(`    ${param.name}: A ${mappedType} (original type: ${param.type})`, 2) + '\n';
+          } else {
+            code += this.indent(`    ${param.name}: A ${param.type}`, 2) + '\n';
+          }
         }
       }
       
       // Method docstring return value
       if (method.returnType !== 'void' && method.returnType !== 'None') {
-        code += this.indent('Returns:', 2) + '\n';
-        code += this.indent('    ' + method.returnType, 2) + '\n';
+        const mappedReturnType = this.mapPythonType(method.returnType);
+        if (this.isComplexGenericType(method.returnType)) {
+          code += this.indent('Returns:', 2) + '\n';
+          code += this.indent(`    ${mappedReturnType} (original type: ${method.returnType})`, 2) + '\n';
+        } else {
+          code += this.indent('Returns:', 2) + '\n';
+          code += this.indent(`    ${method.returnType}`, 2) + '\n';
+        }
       }
       
       code += this.indent('"""', 2) + '\n';
@@ -191,14 +202,25 @@ class PythonGenerator extends BaseGenerator {
       if (method.parameters.length > 0) {
         code += this.indent('Args:', 2) + '\n';
         for (const param of method.parameters) {
-          code += this.indent(`    ${param.name}: A ${param.type}`, 2) + '\n';
+          const mappedType = this.mapPythonType(param.type);
+          if (this.isComplexGenericType(param.type)) {
+            code += this.indent(`    ${param.name}: A ${mappedType} (original type: ${param.type})`, 2) + '\n';
+          } else {
+            code += this.indent(`    ${param.name}: A ${param.type}`, 2) + '\n';
+          }
         }
       }
       
       // Method docstring return value
       if (method.returnType !== 'void' && method.returnType !== 'None') {
-        code += this.indent('Returns:', 2) + '\n';
-        code += this.indent('    ' + method.returnType, 2) + '\n';
+        const mappedReturnType = this.mapPythonType(method.returnType);
+        if (this.isComplexGenericType(method.returnType)) {
+          code += this.indent('Returns:', 2) + '\n';
+          code += this.indent(`    ${mappedReturnType} (original type: ${method.returnType})`, 2) + '\n';
+        } else {
+          code += this.indent('Returns:', 2) + '\n';
+          code += this.indent(`    ${method.returnType}`, 2) + '\n';
+        }
       }
       
       code += this.indent('"""', 2) + '\n';
@@ -239,6 +261,24 @@ class PythonGenerator extends BaseGenerator {
   mapPythonType(type) {
     if (!type) return 'None';
     
+    // Handle complex generic types
+    if (this.isComplexGenericType(type)) {
+      // Extract the base type (e.g., "Map" from "Map<String, Integer>")
+      const baseType = this.extractBaseGenericType(type).toLowerCase();
+      
+      // Map common collection types
+      switch (baseType) {
+        case 'list': return 'List[Any]';
+        case 'arraylist': return 'List[Any]';
+        case 'map': case 'hashmap': return 'Dict[Any, Any]';
+        case 'set': case 'hashset': return 'Set[Any]';
+        case 'collection': return 'List[Any]';
+        case 'iterable': return 'Iterable[Any]';
+        default: return 'Any';  // For unknown generic types
+      }
+    }
+    
+    // Regular mapping
     switch (type.toLowerCase()) {
       case 'boolean': return 'bool';
       case 'integer': case 'int': return 'int';

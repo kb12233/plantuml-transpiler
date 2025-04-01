@@ -2,7 +2,7 @@ const BaseGenerator = require('./BaseGenerator');
 
 class CSharpGenerator extends BaseGenerator {
   generateHeader(classDiagram) {
-    return "// Generated C# code from PlantUML class diagram\nusing System;\n\n";
+    return "// Generated C# code from PlantUML class diagram\nusing System;\nusing System.Collections.Generic;\n\n";
   }
   
   generatePackageStart(packageName) {
@@ -124,11 +124,21 @@ class CSharpGenerator extends BaseGenerator {
       
       // Method documentation
       for (const param of method.parameters) {
-        code += this.indent(`/// <param name="${param.name}">${param.type} parameter</param>\n`, 2);
+        const mappedType = this.mapCSharpType(param.type);
+        if (this.isComplexGenericType(param.type)) {
+          code += this.indent(`/// <param name="${param.name}">${mappedType} parameter (original type: ${param.type})</param>\n`, 2);
+        } else {
+          code += this.indent(`/// <param name="${param.name}">${param.type} parameter</param>\n`, 2);
+        }
       }
       
       if (method.returnType !== 'void') {
-        code += this.indent(`/// <returns>${method.returnType}</returns>\n`, 2);
+        const mappedReturnType = this.mapCSharpType(method.returnType);
+        if (this.isComplexGenericType(method.returnType)) {
+          code += this.indent(`/// <returns>${mappedReturnType} (original type: ${method.returnType})</returns>\n`, 2);
+        } else {
+          code += this.indent(`/// <returns>${method.returnType}</returns>\n`, 2);
+        }
       }
       
       code += this.indent("/// </summary>\n", 2);
@@ -210,11 +220,21 @@ class CSharpGenerator extends BaseGenerator {
       
       // Method documentation
       for (const param of method.parameters) {
-        code += this.indent(`/// <param name="${param.name}">${param.type} parameter</param>\n`, 2);
+        const mappedType = this.mapCSharpType(param.type);
+        if (this.isComplexGenericType(param.type)) {
+          code += this.indent(`/// <param name="${param.name}">${mappedType} parameter (original type: ${param.type})</param>\n`, 2);
+        } else {
+          code += this.indent(`/// <param name="${param.name}">${param.type} parameter</param>\n`, 2);
+        }
       }
       
       if (method.returnType !== 'void') {
-        code += this.indent(`/// <returns>${method.returnType}</returns>\n`, 2);
+        const mappedReturnType = this.mapCSharpType(method.returnType);
+        if (this.isComplexGenericType(method.returnType)) {
+          code += this.indent(`/// <returns>${mappedReturnType} (original type: ${method.returnType})</returns>\n`, 2);
+        } else {
+          code += this.indent(`/// <returns>${method.returnType}</returns>\n`, 2);
+        }
       }
       
       code += this.indent("/// </summary>\n", 2);
@@ -269,6 +289,23 @@ class CSharpGenerator extends BaseGenerator {
   mapCSharpType(type) {
     if (!type) return 'void';
     
+    // Handle complex generic types
+    if (this.isComplexGenericType(type)) {
+      // Extract the base type (e.g., "Map" from "Map<String, Integer>")
+      const baseType = this.extractBaseGenericType(type).toLowerCase();
+      
+      // Map common collection types
+      switch (baseType) {
+        case 'list': case 'arraylist': return 'List<object>';
+        case 'map': case 'hashmap': return 'Dictionary<object, object>';
+        case 'set': case 'hashset': return 'HashSet<object>';
+        case 'collection': return 'ICollection<object>';
+        case 'iterable': return 'IEnumerable<object>';
+        default: return `${baseType.charAt(0).toUpperCase() + baseType.slice(1)}<object>`;
+      }
+    }
+    
+    // Regular type mapping
     switch (type.toLowerCase()) {
       case 'boolean': return 'bool';
       case 'integer': case 'int': return 'int';

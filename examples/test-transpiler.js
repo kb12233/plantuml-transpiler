@@ -4,10 +4,11 @@ const PlantUMLTranspiler = require('../src/index');
 const plantUmlCode = `
 @startuml
 package packageName {
-  class User<yoooo> {
+  class User<x, y> {
     {final} id: int
     name: String
-    {static} {abstract} getId(): int
+    {static} {final} newMethod(newParam: Map<String, Map<String, List<Integer>>>, anotherParam: Map<String, List<Integer>>): Map<String, List<Integer>>
+    {abstract} getId(): int
     + {static} setName(name: String): void
     +User(id: int, name: String)
   }
@@ -27,15 +28,31 @@ package packageName {
 }
 
 package anotherOne {
-  interface UserService {
+  interface UserService<E, F, G> {
     +findById(id: int): User
     +save(user: User): void
   }
 }
 
 
-User <.. UserService
+UserService <|.. User
+User ..|> UserService
+
+UserService <.. User
+User ..> UserService
+
+User <-- NormalUser
+NormalUser --> User
+
 User <|-- NormalUser
+NormalUser --|> User
+
+User <--* NormalUser
+NormalUser *--> User
+
+User <--o NormalUser
+NormalUser o--> User
+
 @enduml
 `;
 
@@ -73,7 +90,7 @@ const transpiler = new PlantUMLTranspiler();
 //   'typescript'
 // ]
 console.log("Supported languages:", transpiler.getSupportedLanguages());
-const language = 'kotlin'; // Change this to test other languages
+const language = 'ruby'; // Change this to test other languages
 console.log(`\n\n---------- ${language.toUpperCase()} CODE ----------`);
 try {
   const code = transpiler.transpile(plantUmlCode, language);

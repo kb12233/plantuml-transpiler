@@ -118,18 +118,28 @@ class RubyGenerator extends BaseGenerator {
     if (staticMethods.length > 0) {
       for (const method of staticMethods) {
         // Class method documentation
-        code += this.indent(`# ${method.name} method`);
+        code += this.indent(`# ${method.name} method \n`);
         
         // Method parameters documentation
         if (method.parameters.length > 0) {
           for (const param of method.parameters) {
-            code += this.indent(`# @param ${param.name} [${param.type}]`);
+            if (this.isComplexGenericType(param.type)) {
+              const mappedType = this.mapRubyType(param.type);
+              code += this.indent(`# @param ${param.name} [${mappedType}] ${param.type} (complex type) \n`);
+            } else {
+              code += this.indent(`# @param ${param.name} [${param.type}] \n`);
+            }
           }
         }
         
         // Return type documentation
         if (method.returnType !== 'void') {
-          code += this.indent(`# @return [${method.returnType}]`);
+          if (this.isComplexGenericType(method.returnType)) {
+            const mappedType = this.mapRubyType(method.returnType);
+            code += this.indent(`# @return [${mappedType}] ${method.returnType} (complex type) \n`);
+          } else {
+            code += this.indent(`# @return [${method.returnType}] \n`);
+          }
         }
         
         // Class method definition
@@ -166,13 +176,23 @@ class RubyGenerator extends BaseGenerator {
         // Method parameters documentation
         if (method.parameters.length > 0) {
           for (const param of method.parameters) {
-            code += this.indent(`# @param ${param.name} [${param.type}]`) + '\n';
+            if (this.isComplexGenericType(param.type)) {
+              const mappedType = this.mapRubyType(param.type);
+              code += this.indent(`# @param ${param.name} [${mappedType}] ${param.type} (complex type)`) + '\n';
+            } else {
+              code += this.indent(`# @param ${param.name} [${param.type}]`) + '\n';
+            }
           }
         }
         
         // Return type documentation
         if (method.returnType !== 'void') {
-          code += this.indent(`# @return [${method.returnType}]`) + '\n';
+          if (this.isComplexGenericType(method.returnType)) {
+            const mappedType = this.mapRubyType(method.returnType);
+            code += this.indent(`# @return [${mappedType}] ${method.returnType} (complex type)`) + '\n';
+          } else {
+            code += this.indent(`# @return [${method.returnType}]`) + '\n';
+          }
         }
         
         // Method visibility
@@ -230,13 +250,23 @@ class RubyGenerator extends BaseGenerator {
       // Method parameters documentation
       if (method.parameters.length > 0) {
         for (const param of method.parameters) {
-          code += this.indent(`# @param ${param.name} [${param.type}]`) + '\n';
+          if (this.isComplexGenericType(param.type)) {
+            const mappedType = this.mapRubyType(param.type);
+            code += this.indent(`# @param ${param.name} [${mappedType}] ${param.type} (complex type)`) + '\n';
+          } else {
+            code += this.indent(`# @param ${param.name} [${param.type}]`) + '\n';
+          }
         }
       }
       
       // Return type documentation
       if (method.returnType !== 'void') {
-        code += this.indent(`# @return [${method.returnType}]`) + '\n';
+        if (this.isComplexGenericType(method.returnType)) {
+          const mappedType = this.mapRubyType(method.returnType);
+          code += this.indent(`# @return [${mappedType}] ${method.returnType} (complex type)`) + '\n';
+        } else {
+          code += this.indent(`# @return [${method.returnType}]`) + '\n';
+        }
       }
       
       // Method definition
@@ -274,6 +304,39 @@ class RubyGenerator extends BaseGenerator {
     
     return code;
   }
+  
+  mapRubyType(type) {
+    if (!type) return 'nil';
+    
+    // Handle complex generic types
+    if (this.isComplexGenericType(type)) {
+      // Extract the base type (e.g., "Map" from "Map<String, Integer>")
+      const baseType = this.extractBaseGenericType(type).toLowerCase();
+      
+      // Map common collection types to Ruby equivalents (for documentation)
+      switch (baseType) {
+        case 'list': case 'arraylist': return 'Array';
+        case 'map': case 'hashmap': return 'Hash';
+        case 'set': case 'hashset': return 'Set';
+        case 'collection': return 'Array';
+        case 'iterable': return 'Enumerable';
+        default: return baseType.charAt(0).toUpperCase() + baseType.slice(1);
+      }
+    }
+    
+    // Map basic types
+    switch (type.toLowerCase()) {
+      case 'boolean': case 'bool': return 'Boolean';
+      case 'integer': case 'int': case 'long': return 'Integer';
+      case 'float': case 'double': return 'Float';
+      case 'string': case 'char': return 'String';
+      case 'void': return 'nil';
+      case 'object': return 'Object';
+      default: return type.charAt(0).toUpperCase() + type.slice(1); // Proper casing for Ruby
+    }
+  }
 }
 
 module.exports = RubyGenerator;
+        
+        //

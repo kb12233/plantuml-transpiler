@@ -84,12 +84,20 @@ class JavaScriptGenerator extends BaseGenerator {
       
       // Method parameters documentation
       for (const param of method.parameters) {
-        code += this.indent(` * @param {*} ${param.name} - ${param.type} parameter\n`);
+        if (this.isComplexGenericType(param.type)) {
+          code += this.indent(` * @param {*} ${param.name} - ${param.type} parameter (complex type)\n`);
+        } else {
+          code += this.indent(` * @param {*} ${param.name} - ${param.type} parameter\n`);
+        }
       }
       
       // Return type documentation
       if (method.returnType !== 'void') {
-        code += this.indent(` * @returns {*} ${method.returnType}\n`);
+        if (this.isComplexGenericType(method.returnType)) {
+          code += this.indent(` * @returns {*} ${method.returnType} (complex type)\n`);
+        } else {
+          code += this.indent(` * @returns {*} ${method.returnType}\n`);
+        }
       }
       
       code += this.indent(` */\n`);
@@ -173,12 +181,20 @@ class JavaScriptGenerator extends BaseGenerator {
       
       // Method parameters documentation
       for (const param of method.parameters) {
-        code += this.indent(` * @param {*} ${param.name} - ${param.type} parameter\n`);
+        if (this.isComplexGenericType(param.type)) {
+          code += this.indent(` * @param {*} ${param.name} - ${param.type} parameter (complex type)\n`);
+        } else {
+          code += this.indent(` * @param {*} ${param.name} - ${param.type} parameter\n`);
+        }
       }
       
       // Return type documentation
       if (method.returnType !== 'void') {
-        code += this.indent(` * @returns {*} ${method.returnType}\n`);
+        if (this.isComplexGenericType(method.returnType)) {
+          code += this.indent(` * @returns {*} ${method.returnType} (complex type)\n`);
+        } else {
+          code += this.indent(` * @returns {*} ${method.returnType}\n`);
+        }
       }
       
       code += this.indent(` */\n`);
@@ -220,6 +236,12 @@ class JavaScriptGenerator extends BaseGenerator {
     code += '});\n\n';
     
     return code;
+  }
+  
+  // Helper method to handle complex types in documentation
+  mapJsType(type) {
+    // JavaScript doesn't have static types, but we can use this for documentation
+    return type;
   }
 }
 

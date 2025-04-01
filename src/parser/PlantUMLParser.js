@@ -381,10 +381,41 @@ class PlantUMLParser {
     
     let sourceClass, targetClass, type;
     
-    // Try different relationship patterns
+    // Correctly handle PlantUML arrow notations:
+    // Composition: '*-->' or '<--*'
+    // Aggregation: 'o-->' or '<--o'
+    // Note: In PlantUML, the * or o is adjacent to the class it belongs to
     
+    // Composition: Container *--> Element
+    if (line.match(/\s*(\w+)\s+\*-->\s+(\w+)\s*/)) {
+      const match = line.match(/\s*(\w+)\s+\*-->\s+(\w+)\s*/);
+      sourceClass = match[1];
+      targetClass = match[2];
+      type = 'composition';
+    }
+    // Reverse Composition: Element <--* Container
+    else if (line.match(/\s*(\w+)\s+<--\*\s+(\w+)\s*/)) {
+      const match = line.match(/\s*(\w+)\s+<--\*\s+(\w+)\s*/);
+      sourceClass = match[2]; // Swap to maintain consistent source->target semantics
+      targetClass = match[1];
+      type = 'composition';
+    }
+    // Aggregation: Container o--> Element
+    else if (line.match(/\s*(\w+)\s+o-->\s+(\w+)\s*/)) {
+      const match = line.match(/\s*(\w+)\s+o-->\s+(\w+)\s*/);
+      sourceClass = match[1];
+      targetClass = match[2];
+      type = 'aggregation';
+    }
+    // Reverse Aggregation: Element <--o Container
+    else if (line.match(/\s*(\w+)\s+<--o\s+(\w+)\s*/)) {
+      const match = line.match(/\s*(\w+)\s+<--o\s+(\w+)\s*/);
+      sourceClass = match[2]; // Swap to maintain consistent source->target semantics
+      targetClass = match[1];
+      type = 'aggregation';
+    }
     // Inheritance: Child --|> Parent
-    if (line.includes('--|>')) {
+    else if (line.includes('--|>')) {
       const parts = line.split('--|>').map(part => part.trim());
       if (parts.length === 2) {
         sourceClass = parts[0];
@@ -401,7 +432,7 @@ class PlantUMLParser {
         type = 'inheritance';
       }
     }
-    // Implementation: Class --|> Interface (using dashed line)
+    // Implementation: Class ..|> Interface (using dashed line)
     else if (line.includes('..|>')) {
       const parts = line.split('..|>').map(part => part.trim());
       if (parts.length === 2) {
@@ -455,47 +486,8 @@ class PlantUMLParser {
         type = 'association';
       }
     }
-    // Aggregation: Container o--> Element
-    else if (line.includes('o-->')) {
-      const parts = line.split('o-->').map(part => part.trim());
-      if (parts.length === 2) {
-        sourceClass = parts[0];
-        targetClass = parts[1];
-        type = 'aggregation';
-      }
-    }
-    // Reverse Aggregation: Element <--o Container
-    else if (line.includes('<--o')) {
-      const parts = line.split('<--o').map(part => part.trim());
-      if (parts.length === 2) {
-        sourceClass = parts[1]; // Swap to maintain consistent source->target semantics
-        targetClass = parts[0];
-        type = 'aggregation';
-      }
-    }
-    // Composition: Container *--> Element
-    else if (line.includes('*-->')) {
-      const parts = line.split('*-->').map(part => part.trim());
-      if (parts.length === 2) {
-        sourceClass = parts[0];
-        targetClass = parts[1];
-        type = 'composition';
-      }
-    }
-    // Reverse Composition: Element <--* Container
-    else if (line.includes('<--*')) {
-      const parts = line.split('<--*').map(part => part.trim());
-      if (parts.length === 2) {
-        sourceClass = parts[1]; // Swap to maintain consistent source->target semantics
-        targetClass = parts[0];
-        type = 'composition';
-      }
-    }
     
     if (sourceClass && targetClass && type) {
-      // Clean up any extra whitespace or characters
-      sourceClass = sourceClass.replace(/\s+/g, '');
-      targetClass = targetClass.replace(/\s+/g, '');
       return new Relationship(sourceClass, targetClass, type, label);
     }
     
