@@ -146,15 +146,17 @@ class JavaGenerator extends BaseGenerator {
         
         // Return statement for non-void methods
         if (method.returnType !== 'void') {
-          if (method.returnType === 'boolean') {
+          const mappedReturnType = this.mapJavaType(method.returnType);
+          const lowerMappedType = mappedReturnType.toLowerCase();
+          
+          if (lowerMappedType === 'boolean') {
             code += this.indent('return false;\n', 2);
-          } else if (method.returnType === 'int' || method.returnType === 'long' || 
-                     method.returnType === 'float' || method.returnType === 'double') {
+          } else if (['byte', 'short', 'int', 'long', 'float', 'double'].includes(lowerMappedType)) {
             code += this.indent('return 0;\n', 2);
-          } else if (method.returnType === 'char') {
+          } else if (lowerMappedType === 'char') {
             code += this.indent("return ' ';\n", 2);
-          } else if (method.returnType === 'byte' || method.returnType === 'short') {
-            code += this.indent('return 0;\n', 2);
+          } else if (lowerMappedType === 'string') {
+            code += this.indent('return "";\n', 2);
           } else {
             code += this.indent('return null;\n', 2);
           }

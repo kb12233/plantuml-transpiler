@@ -4,6 +4,12 @@ const PlantUMLTranspiler = require('../src/index');
 const plantUmlCode = `
 @startuml
 package packageName {
+  abstract class AbstractClass {
+    {abstract} abstractMethod(param: int): void
+    +{static} staticMethod(param: String): void
+    - {static} staticMethod2(param: String): void
+  }
+
   class User<x, y> {
     {final} id: int
     name: String
@@ -36,7 +42,7 @@ package anotherOne {
 
 
 UserService <|.. User
-User ..|> UserService
+
 
 UserService <.. User
 User ..> UserService
@@ -90,7 +96,7 @@ const transpiler = new PlantUMLTranspiler();
 //   'typescript'
 // ]
 console.log("Supported languages:", transpiler.getSupportedLanguages());
-const language = 'ruby'; // Change this to test other languages
+const language = 'python'; // Change this to test other languages
 console.log(`\n\n---------- ${language.toUpperCase()} CODE ----------`);
 try {
   const code = transpiler.transpile(plantUmlCode, language);

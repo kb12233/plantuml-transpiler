@@ -136,12 +136,13 @@ class KotlinGenerator extends BaseGenerator {
         
         // Return statement for non-void methods
         if (method.returnType !== 'void' && method.returnType !== 'Unit') {
-          if (method.returnType === 'Boolean') {
+          const mappedReturnType = this.mapKotlinType(method.returnType);
+          
+          if (mappedReturnType === 'Boolean') {
             code += this.indent('return false', 3) + '\n';
-          } else if (method.returnType === 'Int' || method.returnType === 'Long' || 
-                    method.returnType === 'Float' || method.returnType === 'Double') {
+          } else if (['Int', 'Long', 'Float', 'Double'].includes(mappedReturnType)) {
             code += this.indent('return 0', 3) + '\n';
-          } else if (method.returnType === 'String') {
+          } else if (mappedReturnType === 'String') {
             code += this.indent('return ""', 3) + '\n';
           } else {
             code += this.indent('return null', 3) + '\n';
@@ -199,12 +200,13 @@ class KotlinGenerator extends BaseGenerator {
         
         // Return statement for non-void methods
         if (method.returnType !== 'void' && method.returnType !== 'Unit') {
-          if (method.returnType === 'Boolean') {
+          const mappedReturnType = this.mapKotlinType(method.returnType);
+          
+          if (mappedReturnType === 'Boolean') {
             code += this.indent('return false', 2) + '\n';
-          } else if (method.returnType === 'Int' || method.returnType === 'Long' || 
-                    method.returnType === 'Float' || method.returnType === 'Double') {
+          } else if (['Int', 'Long', 'Float', 'Double'].includes(mappedReturnType)) {
             code += this.indent('return 0', 2) + '\n';
-          } else if (method.returnType === 'String') {
+          } else if (mappedReturnType === 'String') {
             code += this.indent('return ""', 2) + '\n';
           } else {
             code += this.indent('return null', 2) + '\n';

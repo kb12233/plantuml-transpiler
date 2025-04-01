@@ -119,12 +119,14 @@ class JavaScriptGenerator extends BaseGenerator {
       
       // Return statement for non-void methods
       if (method.returnType !== 'void') {
-        if (method.returnType === 'boolean') {
+        // JavaScript doesn't have real type mapping but we can infer the correct return value
+        const lowerReturnType = method.returnType.toLowerCase();
+        
+        if (lowerReturnType === 'boolean' || lowerReturnType === 'bool') {
           code += this.indent('return false;', 2) + '\n';
-        } else if (method.returnType === 'int' || method.returnType === 'long' || 
-                   method.returnType === 'float' || method.returnType === 'double') {
+        } else if (['int', 'integer', 'long', 'float', 'double', 'number', 'byte', 'short'].includes(lowerReturnType)) {
           code += this.indent('return 0;', 2) + '\n';
-        } else if (method.returnType === 'string') {
+        } else if (lowerReturnType === 'string' || lowerReturnType === 'char') {
           code += this.indent('return "";', 2) + '\n';
         } else {
           code += this.indent('return null;', 2) + '\n';

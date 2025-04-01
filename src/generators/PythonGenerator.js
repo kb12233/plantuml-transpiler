@@ -153,12 +153,13 @@ class PythonGenerator extends BaseGenerator {
         
         // Return statement for non-void methods
         if (method.returnType !== 'void' && method.returnType !== 'None') {
-          if (method.returnType === 'bool' || method.returnType === 'boolean') {
+          const mappedReturnType = this.mapPythonType(method.returnType);
+          
+          if (mappedReturnType === 'bool') {
             code += this.indent('return False', 2) + '\n\n';
-          } else if (method.returnType === 'int' || method.returnType === 'long' || 
-                    method.returnType === 'float' || method.returnType === 'double') {
+          } else if (['int', 'float'].includes(mappedReturnType)) {
             code += this.indent('return 0', 2) + '\n\n';
-          } else if (method.returnType === 'str' || method.returnType === 'string') {
+          } else if (mappedReturnType === 'str') {
             code += this.indent('return ""', 2) + '\n\n';
           } else {
             code += this.indent('return None', 2) + '\n\n';

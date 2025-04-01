@@ -172,11 +172,13 @@ class TypeScriptGenerator extends BaseGenerator {
         
         // Return statement for non-void methods
         if (method.returnType !== 'void') {
-          if (method.returnType === 'boolean') {
+          const mappedReturnType = this.mapTsType(method.returnType);
+          
+          if (mappedReturnType === 'boolean') {
             code += this.indent('return false;', 3) + '\n';
-          } else if (method.returnType === 'number') {
+          } else if (mappedReturnType === 'number') {
             code += this.indent('return 0;', 3) + '\n';
-          } else if (method.returnType === 'string') {
+          } else if (mappedReturnType === 'string') {
             code += this.indent('return "";', 3) + '\n';
           } else {
             code += this.indent('return null as any;', 3) + '\n';

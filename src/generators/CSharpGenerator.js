@@ -172,15 +172,16 @@ class CSharpGenerator extends BaseGenerator {
         
         // Return statement for non-void methods
         if (method.returnType !== 'void') {
-          if (method.returnType === 'bool' || method.returnType === 'boolean') {
+          const mappedReturnType = this.mapCSharpType(method.returnType);
+          
+          if (mappedReturnType === 'bool') {
             code += this.indent('return false;\n', 3);
-          } else if (method.returnType === 'int' || method.returnType === 'long' || 
-                     method.returnType === 'float' || method.returnType === 'double') {
+          } else if (['byte', 'short', 'int', 'long', 'float', 'double', 'decimal'].includes(mappedReturnType)) {
             code += this.indent('return 0;\n', 3);
-          } else if (method.returnType === 'char') {
+          } else if (mappedReturnType === 'char') {
             code += this.indent("return ' ';\n", 3);
-          } else if (method.returnType === 'byte' || method.returnType === 'short') {
-            code += this.indent('return 0;\n', 3);
+          } else if (mappedReturnType === 'string') {
+            code += this.indent('return "";\n', 3);
           } else {
             code += this.indent('return null;\n', 3);
           }

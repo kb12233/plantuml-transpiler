@@ -211,12 +211,13 @@ class RubyGenerator extends BaseGenerator {
           
           // Return statement for non-void methods
           if (method.returnType !== 'void') {
-            if (method.returnType === 'boolean' || method.returnType === 'bool') {
+            const mappedReturnType = this.mapRubyType(method.returnType);
+            
+            if (mappedReturnType === 'Boolean') {
               code += this.indent('return false', 2) + '\n';
-            } else if (method.returnType === 'int' || method.returnType === 'long' || 
-                       method.returnType === 'float' || method.returnType === 'double') {
+            } else if (['Integer', 'Float'].includes(mappedReturnType)) {
               code += this.indent('return 0', 2) + '\n';
-            } else if (method.returnType === 'string' || method.returnType === 'String') {
+            } else if (mappedReturnType === 'String') {
               code += this.indent('return ""', 2) + '\n';
             } else {
               code += this.indent('return nil', 2) + '\n';
