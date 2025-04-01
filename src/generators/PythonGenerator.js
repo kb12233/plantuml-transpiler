@@ -97,11 +97,22 @@ class PythonGenerator extends BaseGenerator {
     
     // Methods
     for (const method of classObj.methods) {
+      // Add abstractmethod decorator before method definition if abstract
+      if (method.isAbstract) {
+        code += this.indent('@abstractmethod') + '\n';
+      }
+      
+      // Add staticmethod decorator if static
+      if (method.isStatic) {
+        code += this.indent('@staticmethod') + '\n';
+      }
+      
       // Method definition
-      code += this.indent('@staticmethod') + '\n' + this.indent('def ' + method.name + '(');
+      code += this.indent('def ' + method.name + '(');
       
       // Parameters
       const params = [];
+      // Only include 'self' parameter for instance methods (non-static)
       if (!method.isStatic) {
         params.push('self');
       }
@@ -146,7 +157,6 @@ class PythonGenerator extends BaseGenerator {
       
       // Method body
       if (method.isAbstract) {
-        code += this.indent('@abstractmethod', 2) + '\n';
         code += this.indent('pass', 2) + '\n\n';
       } else {
         code += this.indent('# TODO: Implement method', 2) + '\n';
@@ -164,6 +174,8 @@ class PythonGenerator extends BaseGenerator {
           } else {
             code += this.indent('return None', 2) + '\n\n';
           }
+        } else {
+          code += '\n';
         }
       }
     }
@@ -186,6 +198,9 @@ class PythonGenerator extends BaseGenerator {
     
     // Methods
     for (const method of interfaceObj.methods) {
+      // Add abstractmethod decorator before method definition
+      code += this.indent('@abstractmethod') + '\n';
+      
       // Method definition
       code += this.indent('def ' + method.name + '(self');
       
@@ -225,9 +240,6 @@ class PythonGenerator extends BaseGenerator {
       }
       
       code += this.indent('"""', 2) + '\n';
-      
-      // Abstract method
-      code += this.indent('@abstractmethod', 2) + '\n';
       code += this.indent('pass', 2) + '\n\n';
     }
     

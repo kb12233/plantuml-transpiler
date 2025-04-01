@@ -61,23 +61,81 @@ class RubyGenerator extends BaseGenerator {
       code += '\n';
     }
     
-    // Attributes as attr_accessor
-    if (classObj.attributes.length > 0) {
-      const attrs = [];
+    // Static attributes - handling regular static and "static final" (constant) attributes
+    const staticAttrs = classObj.attributes.filter(a => a.isStatic);
+    if (staticAttrs.length > 0) {
+      // First handle static final attributes as Ruby constants
+      const staticFinalAttrs = staticAttrs.filter(a => a.isFinal);
+      if (staticFinalAttrs.length > 0) {
+        for (const attr of staticFinalAttrs) {
+          // Use constants (uppercase) for static final attributes - more idiomatic in Ruby
+          const constantName = attr.name.toUpperCase();
+          code += this.indent(`${constantName} = nil.freeze # Constant (static final)`) + '\n';
+        }
+        code += '\n';
+      }
       
-      for (const attr of classObj.attributes) {
-        // In Ruby, we use attr_accessor, attr_reader, and attr_writer
-        if (attr.visibility === 'private') {
-          // Private attributes
-          attrs.push(`:${attr.name}`);
-        } else {
-          // Public attributes
-          attrs.push(`:${attr.name}`);
+      // Then handle regular static attributes as class variables
+      const regularStaticAttrs = staticAttrs.filter(a => !a.isFinal);
+      if (regularStaticAttrs.length > 0) {
+        for (const attr of regularStaticAttrs) {
+          code += this.indent(`@@${attr.name} = nil # Class variable (static)`) + '\n';
+        }
+        
+        // Class getters/setters for regular static attributes
+        for (const attr of regularStaticAttrs) {
+          // Class getter
+          code += '\n' + this.indent(`def self.${attr.name}`) + '\n';
+          code += this.indent(`@@${attr.name}`, 2) + '\n';
+          code += this.indent('end') + '\n';
+          
+          // Class setter 
+          code += this.indent(`def self.${attr.name}=(value)`) + '\n';
+          code += this.indent(`@@${attr.name} = value`, 2) + '\n';
+          code += this.indent('end') + '\n';
         }
       }
       
-      if (attrs.length > 0) {
-        code += this.indent(`attr_accessor ${attrs.join(', ')}`) + '\n\n';
+      // Add getters for static final attributes
+      if (staticFinalAttrs.length > 0) {
+        for (const attr of staticFinalAttrs) {
+          const constantName = attr.name.toUpperCase();
+          
+          // Add a class method to access the constant
+          code += '\n' + this.indent(`def self.${attr.name}`) + '\n';
+          code += this.indent(`${constantName}`, 2) + '\n';
+          code += this.indent('end') + '\n';
+        }
+      }
+      
+      code += '\n';
+    }
+    
+    // Instance attributes as attr_accessor, attr_reader, or manually handled
+    if (classObj.attributes.length > 0) {
+      const instanceAttrs = classObj.attributes.filter(a => !a.isStatic);
+      
+      if (instanceAttrs.length > 0) {
+        // Group attributes by whether they're final or not
+        const readWriteAttrs = instanceAttrs
+          .filter(attr => !attr.isFinal)
+          .map(attr => `:${attr.name}`);
+        
+        const readOnlyAttrs = instanceAttrs
+          .filter(attr => attr.isFinal)
+          .map(attr => `:${attr.name}`);
+        
+        // Generate attr_accessor for read/write attributes
+        if (readWriteAttrs.length > 0) {
+          code += this.indent(`attr_accessor ${readWriteAttrs.join(', ')}`) + '\n';
+        }
+        
+        // Generate attr_reader for read-only (final) attributes
+        if (readOnlyAttrs.length > 0) {
+          code += this.indent(`attr_reader ${readOnlyAttrs.join(', ')}`) + '\n';
+        }
+        
+        code += '\n';
       }
     }
     
@@ -92,7 +150,9 @@ class RubyGenerator extends BaseGenerator {
         params.push(...constructor.parameters.map(p => p.name));
       } else {
         // If no constructor is specified, use attributes
-        params.push(...classObj.attributes.map(a => a.name));
+        params.push(...classObj.attributes
+          .filter(a => !a.isStatic) // Only instance attributes
+          .map(a => a.name));
       }
       
       // Add optional parameters with default values
@@ -103,9 +163,14 @@ class RubyGenerator extends BaseGenerator {
       
       // Initialize attributes in the constructor
       if (classObj.attributes.length > 0) {
-        for (const attr of classObj.attributes) {
-          if (!attr.isStatic) {
-            code += this.indent(`@${attr.name} = ${attr.name}`, 2) + '\n';
+        const instanceAttrs = classObj.attributes.filter(a => !a.isStatic);
+        
+        for (const attr of instanceAttrs) {
+          code += this.indent(`@${attr.name} = ${attr.name}`, 2) + '\n';
+          
+          // For final attributes, freeze the value
+          if (attr.isFinal) {
+            code += this.indent(`@${attr.name}.freeze if @${attr.name}.respond_to?(:freeze)`, 2) + '\n';
           }
         }
       }
@@ -146,19 +211,23 @@ class RubyGenerator extends BaseGenerator {
         code += this.indent(`def self.${method.name}(${method.parameters.map(p => p.name).join(', ')})`) + '\n';
         
         // Method body
-        code += this.indent('# TODO: Implement method', 2) + '\n';
-        
-        // Return statement for non-void methods
-        if (method.returnType !== 'void') {
-          if (method.returnType === 'boolean' || method.returnType === 'bool') {
-            code += this.indent('return false', 2) + '\n';
-          } else if (method.returnType === 'int' || method.returnType === 'long' || 
-                    method.returnType === 'float' || method.returnType === 'double') {
-            code += this.indent('return 0', 2) + '\n';
-          } else if (method.returnType === 'string' || method.returnType === 'String') {
-            code += this.indent('return ""', 2) + '\n';
-          } else {
-            code += this.indent('return nil', 2) + '\n';
+        if (method.isAbstract) {
+          code += this.indent('raise NotImplementedError, "Abstract method #{self.name}.#{__method__} must be implemented"', 2) + '\n';
+        } else {
+          code += this.indent('# TODO: Implement method', 2) + '\n';
+          
+          // Return statement for non-void methods
+          if (method.returnType !== 'void') {
+            if (method.returnType === 'boolean' || method.returnType === 'bool') {
+              code += this.indent('return false', 2) + '\n';
+            } else if (method.returnType === 'int' || method.returnType === 'long' || 
+                      method.returnType === 'float' || method.returnType === 'double') {
+              code += this.indent('return 0', 2) + '\n';
+            } else if (method.returnType === 'string' || method.returnType === 'String') {
+              code += this.indent('return ""', 2) + '\n';
+            } else {
+              code += this.indent('return nil', 2) + '\n';
+            }
           }
         }
         
@@ -339,5 +408,3 @@ class RubyGenerator extends BaseGenerator {
 }
 
 module.exports = RubyGenerator;
-        
-        //
