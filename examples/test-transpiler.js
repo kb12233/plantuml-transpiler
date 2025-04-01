@@ -42,6 +42,7 @@ package anotherOne {
 
 
 UserService <|.. User
+User ..|> UserService
 
 
 UserService <.. User
@@ -96,7 +97,7 @@ const transpiler = new PlantUMLTranspiler();
 //   'typescript'
 // ]
 console.log("Supported languages:", transpiler.getSupportedLanguages());
-const language = 'python'; // Change this to test other languages
+const language = 'java'; // Change this to test other languages
 console.log(`\n\n---------- ${language.toUpperCase()} CODE ----------`);
 try {
   const code = transpiler.transpile(plantUmlCode, language);

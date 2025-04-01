@@ -10,6 +10,7 @@ const Relationship = require('../models/Relationship');
 class PlantUMLParser {
   constructor() {
     this.currentPackage = null;
+    this.relationshipSet = new Set(); // Add as an instance property
   }
 
   parse(plantUmlCode) {
@@ -17,6 +18,9 @@ class PlantUMLParser {
     
     // Remove comments and sanitize input
     plantUmlCode = this.sanitizeInput(plantUmlCode);
+    
+    // Reset the relationship set for each parse call
+    this.relationshipSet = new Set();
     
     // Process each line
     let currentEntity = null;
@@ -130,7 +134,42 @@ class PlantUMLParser {
   }
   
   parseEntityStart(line, diagram) {
-    // Class definition
+    // Enhanced class definition with extends/implements
+    const extendedClassMatch = line.match(/^(abstract\s+)?class\s+(\w+)(?:<(\w+(?:,\s*\w+)*)>)?(?:\s+extends\s+(\w+))?(?:\s+implements\s+(\w+(?:,\s*\w+)*))?/);
+    if (extendedClassMatch) {
+      const isAbstract = !!extendedClassMatch[1];
+      const className = extendedClassMatch[2];
+      const generics = extendedClassMatch[3] ? extendedClassMatch[3].split(/,\s*/) : [];
+      const parentClass = extendedClassMatch[4];
+      const interfaces = extendedClassMatch[5] ? extendedClassMatch[5].split(/,\s*/) : [];
+      
+      const newClass = new Class(className, isAbstract, this.currentPackage);
+      newClass.generics = generics;
+      diagram.classes.push(newClass);
+      
+      // Add inheritance relationship if extends is specified
+      if (parentClass) {
+        const inheritanceKey = `${className}|inheritance|${parentClass}`;
+        if (!this.relationshipSet.has(inheritanceKey)) {
+          this.relationshipSet.add(inheritanceKey);
+          diagram.relationships.push(new Relationship(className, parentClass, 'inheritance'));
+        }
+      }
+      
+      // Add implementation relationships for each interface
+      for (const interfaceName of interfaces) {
+        const trimmedInterfaceName = interfaceName.trim();
+        const implementationKey = `${className}|implementation|${trimmedInterfaceName}`;
+        if (!this.relationshipSet.has(implementationKey)) {
+          this.relationshipSet.add(implementationKey);
+          diagram.relationships.push(new Relationship(className, trimmedInterfaceName, 'implementation'));
+        }
+      }
+      
+      return { entityType: 'class', entity: newClass };
+    }
+    
+    // Standard class definition (without extends/implements)
     const classMatch = line.match(/^(abstract\s+)?class\s+(\w+)(?:<(\w+(?:,\s*\w+)*)>)?/);
     if (classMatch) {
       const isAbstract = !!classMatch[1];
@@ -285,7 +324,7 @@ class PlantUMLParser {
     }
   }
   
-  // New method to extract all modifiers from a line
+  // Method to extract all modifiers from a line
   extractModifiers(line) {
     const modifiers = [];
     const modifierRegex = /\{(\w+)\}/g;
@@ -298,7 +337,7 @@ class PlantUMLParser {
     return modifiers;
   }
   
-  // New method to remove all modifier blocks from a line
+  // Method to remove all modifier blocks from a line
   removeModifiers(line) {
     return line.replace(/\{\w+\}/g, '');
   }
@@ -488,7 +527,17 @@ class PlantUMLParser {
     }
     
     if (sourceClass && targetClass && type) {
-      return new Relationship(sourceClass, targetClass, type, label);
+      // Create a unique key for the relationship
+      const relationshipKey = `${sourceClass}|${type}|${targetClass}`;
+      
+      // Check if this relationship already exists
+      if (!this.relationshipSet.has(relationshipKey)) {
+        this.relationshipSet.add(relationshipKey);
+        return new Relationship(sourceClass, targetClass, type, label);
+      }
+      
+      // Return null if relationship is redundant
+      return null;
     }
     
     return null;
