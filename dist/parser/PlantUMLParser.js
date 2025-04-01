@@ -11,6 +11,7 @@ const Relationship = require('../models/Relationship');
 class PlantUMLParser {
   constructor() {
     this.currentPackage = null;
+    this.relationshipSet = new Set(); // Add as an instance property
   }
   parse(plantUmlCode) {
     const diagram = new ClassDiagram();
@@ -18,10 +19,15 @@ class PlantUMLParser {
     // Remove comments and sanitize input
     plantUmlCode = this.sanitizeInput(plantUmlCode);
 
+    // Reset the relationship set for each parse call
+    this.relationshipSet = new Set();
+
     // Process each line
     let currentEntity = null;
     let inEntityDefinition = false;
-    let bracketCount = 0;
+    let packageBracketCount = 0; // Track package nesting level
+    let entityBracketCount = 0; // Track entity nesting level separately
+
     const lines = plantUmlCode.split('\n');
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i].trim();
@@ -32,14 +38,16 @@ class PlantUMLParser {
         const packageMatch = line.match(/^package\s+"?([^"{}]+)"?\s*{?$/);
         if (packageMatch) {
           this.currentPackage = packageMatch[1].trim();
-          if (line.endsWith('{')) bracketCount++;
+          if (line.endsWith('{')) {
+            packageBracketCount++;
+          }
           diagram.packages[this.currentPackage] = [];
         }
       }
-      // Check for end of package
-      else if (line === '}' && bracketCount > 0) {
-        bracketCount--;
-        if (bracketCount === 0) {
+      // Check for end of package - only if we're not inside an entity
+      else if (line === '}' && !inEntityDefinition && packageBracketCount > 0) {
+        packageBracketCount--;
+        if (packageBracketCount === 0) {
           this.currentPackage = null;
         }
       }
@@ -60,15 +68,22 @@ class PlantUMLParser {
 
           // Check if the definition continues on the same line
           if (line.includes('{')) {
-            bracketCount++;
+            entityBracketCount++;
           }
         }
       }
       // Check for end of entity definition
-      else if (inEntityDefinition && line === '}') {
-        inEntityDefinition = false;
-        currentEntity = null;
-        bracketCount--;
+      else if (line === '}' && inEntityDefinition) {
+        // Decrement entity bracket count
+        if (entityBracketCount > 0) {
+          entityBracketCount--;
+        }
+
+        // If entity bracket count reaches 0, we're done with the entity
+        if (entityBracketCount === 0) {
+          inEntityDefinition = false;
+          currentEntity = null;
+        }
       }
       // Check for attribute or method inside entity definition
       else if (inEntityDefinition && currentEntity) {
@@ -85,8 +100,8 @@ class PlantUMLParser {
           }
         }
       }
-      // Check for relationship
-      else if (this.isRelationship(line)) {
+      // Check for relationship - only if we're not inside an entity
+      else if (!inEntityDefinition && this.isRelationship(line)) {
         const relationship = this.parseRelationship(line);
         if (relationship) {
           diagram.relationships.push(relationship);
@@ -111,7 +126,43 @@ class PlantUMLParser {
     return line.match(/^(abstract\s+)?class\s+\w+/) || line.match(/^interface\s+\w+/) || line.match(/^enum\s+\w+/);
   }
   parseEntityStart(line, diagram) {
-    // Class definition
+    // Enhanced class definition with extends/implements
+    const extendedClassMatch = line.match(/^(abstract\s+)?class\s+(\w+)(?:<(\w+(?:,\s*\w+)*)>)?(?:\s+extends\s+(\w+))?(?:\s+implements\s+(\w+(?:,\s*\w+)*))?/);
+    if (extendedClassMatch) {
+      const isAbstract = !!extendedClassMatch[1];
+      const className = extendedClassMatch[2];
+      const generics = extendedClassMatch[3] ? extendedClassMatch[3].split(/,\s*/) : [];
+      const parentClass = extendedClassMatch[4];
+      const interfaces = extendedClassMatch[5] ? extendedClassMatch[5].split(/,\s*/) : [];
+      const newClass = new Class(className, isAbstract, this.currentPackage);
+      newClass.generics = generics;
+      diagram.classes.push(newClass);
+
+      // Add inheritance relationship if extends is specified
+      if (parentClass) {
+        const inheritanceKey = `${className}|inheritance|${parentClass}`;
+        if (!this.relationshipSet.has(inheritanceKey)) {
+          this.relationshipSet.add(inheritanceKey);
+          diagram.relationships.push(new Relationship(className, parentClass, 'inheritance'));
+        }
+      }
+
+      // Add implementation relationships for each interface
+      for (const interfaceName of interfaces) {
+        const trimmedInterfaceName = interfaceName.trim();
+        const implementationKey = `${className}|implementation|${trimmedInterfaceName}`;
+        if (!this.relationshipSet.has(implementationKey)) {
+          this.relationshipSet.add(implementationKey);
+          diagram.relationships.push(new Relationship(className, trimmedInterfaceName, 'implementation'));
+        }
+      }
+      return {
+        entityType: 'class',
+        entity: newClass
+      };
+    }
+
+    // Standard class definition (without extends/implements)
     const classMatch = line.match(/^(abstract\s+)?class\s+(\w+)(?:<(\w+(?:,\s*\w+)*)>)?/);
     if (classMatch) {
       const isAbstract = !!classMatch[1];
@@ -158,17 +209,25 @@ class PlantUMLParser {
   }
   isMemberDefinition(line) {
     // Check if line defines a member (attribute or method)
-    return line.match(/^\s*[+\-#~]/) !== null;
+    // This matches members with visibility modifiers (+, -, #, ~)
+    // or members without visibility modifiers, including those starting with modifiers
+    return line.match(/^\s*([+\-#~]|\{[\w]+\}|\w+\s*:|\w+\s*\()/) !== null;
   }
   parseMember(line, entity) {
     // Remove leading/trailing spaces and the opening/closing curly braces if present
     line = line.trim().replace(/\s*\{\s*$/, '');
 
-    // Check if it's a constructor
-    const constructorMatch = line.match(/^\s*([\+\-#~])\s*(\w+)\s*\((.*?)\)\s*$/);
-    if (constructorMatch && constructorMatch[2] === entity.name) {
-      const visibility = this.parseVisibility(constructorMatch[1]);
-      const parameters = this.parseParameters(constructorMatch[3]);
+    // Get all modifiers from line - enhanced to support multiple modifiers
+    const modifiers = this.extractModifiers(line);
+
+    // Remove modifiers from line for cleaner parsing
+    let cleanedLine = this.removeModifiers(line);
+
+    // First, check if it's a constructor (with or without visibility modifier)
+    const constructorWithVisibilityMatch = cleanedLine.match(/^\s*([\+\-#~])\s*(\w+)\s*\((.*?)\)\s*$/);
+    if (constructorWithVisibilityMatch && constructorWithVisibilityMatch[2] === entity.name) {
+      const visibility = this.parseVisibility(constructorWithVisibilityMatch[1]);
+      const parameters = this.parseParameters(constructorWithVisibilityMatch[3]);
       const constructor = new Method(entity.name, null, parameters, visibility);
       if (entity.constructors) {
         entity.constructors.push(constructor);
@@ -176,33 +235,99 @@ class PlantUMLParser {
       return;
     }
 
-    // Check if it's a method
-    const methodMatch = line.match(/^\s*([\+\-#~])(?:\s*\{(abstract|static)\})?\s*(\w+)\s*\((.*?)\)(?:\s*:\s*(\w+(?:<.*>)?))?/);
-    if (methodMatch) {
-      const visibility = this.parseVisibility(methodMatch[1]);
-      const modifier = methodMatch[2] || '';
-      const isAbstract = modifier === 'abstract';
-      const isStatic = modifier === 'static';
-      const name = methodMatch[3];
-      const parameters = this.parseParameters(methodMatch[4]);
-      const returnType = methodMatch[5] || 'void';
+    // Check for constructor without visibility modifier
+    const constructorWithoutVisibilityMatch = cleanedLine.match(/^\s*(\w+)\s*\((.*?)\)\s*$/);
+    if (constructorWithoutVisibilityMatch && constructorWithoutVisibilityMatch[1] === entity.name) {
+      // Default visibility for constructors is public in many languages
+      const visibility = 'public';
+      const parameters = this.parseParameters(constructorWithoutVisibilityMatch[2]);
+      const constructor = new Method(entity.name, null, parameters, visibility);
+      if (entity.constructors) {
+        entity.constructors.push(constructor);
+      }
+      return;
+    }
+
+    // Check if it's a method with visibility modifier
+    const methodWithVisibilityMatch = cleanedLine.match(/^\s*([\+\-#~])\s*(\w+)\s*\((.*?)\)(?:\s*:\s*(\w+(?:<.*>)?))?/);
+    if (methodWithVisibilityMatch) {
+      const visibility = this.parseVisibility(methodWithVisibilityMatch[1]);
+      const name = methodWithVisibilityMatch[2];
+      const parameters = this.parseParameters(methodWithVisibilityMatch[3]);
+      const returnType = methodWithVisibilityMatch[4] || 'void';
+
+      // Apply modifiers
+      const isAbstract = modifiers.includes('abstract');
+      const isStatic = modifiers.includes('static');
       const method = new Method(name, returnType, parameters, visibility, isStatic, isAbstract);
       entity.methods.push(method);
       return;
     }
 
-    // Check if it's an attribute
-    const attributeMatch = line.match(/^\s*([\+\-#~])(?:\s*\{(static|final)\})?\s*(\w+)(?:\s*:\s*(\w+(?:<.*>)?))?/);
-    if (attributeMatch && entity.attributes) {
-      const visibility = this.parseVisibility(attributeMatch[1]);
-      const modifier = attributeMatch[2] || '';
-      const isStatic = modifier === 'static';
-      const isFinal = modifier === 'final';
-      const name = attributeMatch[3];
-      const type = attributeMatch[4] || 'Object';
+    // Check if it's a method without visibility modifier
+    const methodWithoutVisibilityMatch = cleanedLine.match(/^\s*(\w+)\s*\((.*?)\)(?:\s*:\s*(\w+(?:<.*>)?))?/);
+    if (methodWithoutVisibilityMatch && cleanedLine.trim() !== '') {
+      // Default visibility for methods without modifiers is public in PlantUML
+      const visibility = 'public';
+      const name = methodWithoutVisibilityMatch[1];
+      const parameters = this.parseParameters(methodWithoutVisibilityMatch[2]);
+      const returnType = methodWithoutVisibilityMatch[3] || 'void';
+
+      // Apply modifiers
+      const isAbstract = modifiers.includes('abstract');
+      const isStatic = modifiers.includes('static');
+      const method = new Method(name, returnType, parameters, visibility, isStatic, isAbstract);
+      entity.methods.push(method);
+      return;
+    }
+
+    // Check if it's an attribute with visibility modifier
+    const attributeWithVisibilityMatch = cleanedLine.match(/^\s*([\+\-#~])\s*(\w+)(?:\s*:\s*(\w+(?:<.*>)?))?/);
+    if (attributeWithVisibilityMatch && entity.attributes) {
+      const visibility = this.parseVisibility(attributeWithVisibilityMatch[1]);
+      const name = attributeWithVisibilityMatch[2];
+      const type = attributeWithVisibilityMatch[3] || 'Object';
+
+      // Apply modifiers
+      const isStatic = modifiers.includes('static');
+      const isFinal = modifiers.includes('final');
       const attribute = new Attribute(name, type, visibility, isStatic, isFinal);
       entity.attributes.push(attribute);
+      return;
     }
+
+    // Check if it's an attribute without visibility modifier
+    // This must be a non-empty line after removing modifiers
+    const attributeWithoutVisibilityMatch = cleanedLine.match(/^\s*(\w+)(?:\s*:\s*(\w+(?:<.*>)?))?/);
+    if (attributeWithoutVisibilityMatch && entity.attributes && cleanedLine.trim() !== '') {
+      // Default visibility for attributes without modifiers is public in PlantUML
+      const visibility = 'public';
+      const name = attributeWithoutVisibilityMatch[1];
+      const type = attributeWithoutVisibilityMatch[2] || 'Object';
+
+      // Apply modifiers
+      const isStatic = modifiers.includes('static');
+      const isFinal = modifiers.includes('final');
+      const attribute = new Attribute(name, type, visibility, isStatic, isFinal);
+      entity.attributes.push(attribute);
+      return;
+    }
+  }
+
+  // Method to extract all modifiers from a line
+  extractModifiers(line) {
+    const modifiers = [];
+    const modifierRegex = /\{(\w+)\}/g;
+    let match;
+    while ((match = modifierRegex.exec(line)) !== null) {
+      modifiers.push(match[1]);
+    }
+    return modifiers;
+  }
+
+  // Method to remove all modifier blocks from a line
+  removeModifiers(line) {
+    return line.replace(/\{\w+\}/g, '');
   }
   parseVisibility(symbol) {
     switch (symbol) {
@@ -251,28 +376,34 @@ class PlantUMLParser {
   isRelationship(line) {
     return line.includes('<|--') ||
     // inheritance
+    line.includes('--|>') ||
+    // inheritance (reverse)
     line.includes('<|..') ||
     // implementation
+    line.includes('..|>') ||
+    // implementation (reverse)
     line.includes('-->') ||
     // association
+    line.includes('<--') ||
+    // reverse association
     line.includes('o-->') ||
     // aggregation
+    line.includes('<--o') ||
+    // reverse aggregation
     line.includes('*-->') ||
     // composition
+    line.includes('<--*') ||
+    // reverse composition
     line.includes('..>') ||
     // dependency
+    line.includes('<..') ||
+    // reverse dependency
     line.includes('-->') // simple association
     ;
   }
   parseRelationship(line) {
-    // Extract relationship parts (handle labels too)
-    const parts = line.split(/\s+/);
-    let sourceClass,
-      targetClass,
-      type,
-      label = '';
-
     // Extract label if present (in quotes)
+    let label = '';
     const labelMatch = line.match(/"([^"]+)"/);
     if (labelMatch) {
       label = labelMatch[1];
@@ -280,58 +411,127 @@ class PlantUMLParser {
       line = line.replace(/"[^"]+"\s*/, '');
     }
 
-    // Check relationship type
-    if (line.includes('<|--')) {
-      // Inheritance: Child <|-- Parent
-      const match = line.match(/(\w+)\s+<\|--\s+(\w+)/);
-      if (match) {
-        sourceClass = match[1]; // Child
-        targetClass = match[2]; // Parent
+    // Clean up the line
+    line = line.trim();
+    let sourceClass, targetClass, type;
+
+    // Correctly handle PlantUML arrow notations:
+    // Composition: '*-->' or '<--*'
+    // Aggregation: 'o-->' or '<--o'
+    // Note: In PlantUML, the * or o is adjacent to the class it belongs to
+
+    // Composition: Container *--> Element
+    if (line.match(/\s*(\w+)\s+\*-->\s+(\w+)\s*/)) {
+      const match = line.match(/\s*(\w+)\s+\*-->\s+(\w+)\s*/);
+      sourceClass = match[1];
+      targetClass = match[2];
+      type = 'composition';
+    }
+    // Reverse Composition: Element <--* Container
+    else if (line.match(/\s*(\w+)\s+<--\*\s+(\w+)\s*/)) {
+      const match = line.match(/\s*(\w+)\s+<--\*\s+(\w+)\s*/);
+      sourceClass = match[2]; // Swap to maintain consistent source->target semantics
+      targetClass = match[1];
+      type = 'composition';
+    }
+    // Aggregation: Container o--> Element
+    else if (line.match(/\s*(\w+)\s+o-->\s+(\w+)\s*/)) {
+      const match = line.match(/\s*(\w+)\s+o-->\s+(\w+)\s*/);
+      sourceClass = match[1];
+      targetClass = match[2];
+      type = 'aggregation';
+    }
+    // Reverse Aggregation: Element <--o Container
+    else if (line.match(/\s*(\w+)\s+<--o\s+(\w+)\s*/)) {
+      const match = line.match(/\s*(\w+)\s+<--o\s+(\w+)\s*/);
+      sourceClass = match[2]; // Swap to maintain consistent source->target semantics
+      targetClass = match[1];
+      type = 'aggregation';
+    }
+    // Inheritance: Child --|> Parent
+    else if (line.includes('--|>')) {
+      const parts = line.split('--|>').map(part => part.trim());
+      if (parts.length === 2) {
+        sourceClass = parts[0];
+        targetClass = parts[1];
         type = 'inheritance';
       }
-    } else if (line.includes('<|..')) {
-      // Implementation: Class <|.. Interface
-      const match = line.match(/(\w+)\s+<\|\.\.+\s+(\w+)/);
-      if (match) {
-        sourceClass = match[1]; // Class
-        targetClass = match[2]; // Interface
+    }
+    // Inheritance (reverse): Parent <|-- Child
+    else if (line.includes('<|--')) {
+      const parts = line.split('<|--').map(part => part.trim());
+      if (parts.length === 2) {
+        sourceClass = parts[1]; // Swap to maintain consistent source->target semantics
+        targetClass = parts[0];
+        type = 'inheritance';
+      }
+    }
+    // Implementation: Class ..|> Interface (using dashed line)
+    else if (line.includes('..|>')) {
+      const parts = line.split('..|>').map(part => part.trim());
+      if (parts.length === 2) {
+        sourceClass = parts[0];
+        targetClass = parts[1];
         type = 'implementation';
       }
-    } else if (line.includes('o-->')) {
-      // Aggregation: Container o--> Element
-      const match = line.match(/(\w+)\s+o-->\s+(\w+)/);
-      if (match) {
-        sourceClass = match[1]; // Container
-        targetClass = match[2]; // Element
-        type = 'aggregation';
+    }
+    // Implementation (reverse): Interface <|.. Class
+    else if (line.includes('<|..')) {
+      const parts = line.split('<|..').map(part => part.trim());
+      if (parts.length === 2) {
+        sourceClass = parts[1]; // Swap to maintain consistent source->target semantics
+        targetClass = parts[0];
+        type = 'implementation';
       }
-    } else if (line.includes('*-->')) {
-      // Composition: Container *--> Element
-      const match = line.match(/(\w+)\s+\*-->\s+(\w+)/);
-      if (match) {
-        sourceClass = match[1]; // Container
-        targetClass = match[2]; // Element
-        type = 'composition';
-      }
-    } else if (line.includes('..>')) {
-      // Dependency: User ..> Service
-      const match = line.match(/(\w+)\s+\.\.>\s+(\w+)/);
-      if (match) {
-        sourceClass = match[1]; // User
-        targetClass = match[2]; // Service
+    }
+    // Dependency: User ..> Service
+    else if (line.includes('..>')) {
+      const parts = line.split('..>').map(part => part.trim());
+      if (parts.length === 2) {
+        sourceClass = parts[0];
+        targetClass = parts[1];
         type = 'dependency';
       }
-    } else if (line.includes('-->')) {
-      // Association: Class --> OtherClass
-      const match = line.match(/(\w+)\s+-->\s+(\w+)/);
-      if (match) {
-        sourceClass = match[1];
-        targetClass = match[2];
+    }
+    // Reverse Dependency: Service <.. User
+    else if (line.includes('<..')) {
+      const parts = line.split('<..').map(part => part.trim());
+      if (parts.length === 2) {
+        sourceClass = parts[1]; // Swap to maintain consistent source->target semantics
+        targetClass = parts[0];
+        type = 'dependency';
+      }
+    }
+    // Association: Class --> OtherClass
+    else if (line.includes('-->')) {
+      const parts = line.split('-->').map(part => part.trim());
+      if (parts.length === 2) {
+        sourceClass = parts[0];
+        targetClass = parts[1];
+        type = 'association';
+      }
+    }
+    // Reverse Association: OtherClass <-- Class
+    else if (line.includes('<--')) {
+      const parts = line.split('<--').map(part => part.trim());
+      if (parts.length === 2) {
+        sourceClass = parts[1]; // Swap to maintain consistent source->target semantics
+        targetClass = parts[0];
         type = 'association';
       }
     }
     if (sourceClass && targetClass && type) {
-      return new Relationship(sourceClass, targetClass, type, label);
+      // Create a unique key for the relationship
+      const relationshipKey = `${sourceClass}|${type}|${targetClass}`;
+
+      // Check if this relationship already exists
+      if (!this.relationshipSet.has(relationshipKey)) {
+        this.relationshipSet.add(relationshipKey);
+        return new Relationship(sourceClass, targetClass, type, label);
+      }
+
+      // Return null if relationship is redundant
+      return null;
     }
     return null;
   }

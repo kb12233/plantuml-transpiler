@@ -32,11 +32,18 @@ class PlantUMLTranspiler {
 
     // Check if the target language is supported
     if (!this.generators[language]) {
-      throw new Error(`Unsupported target language: ${targetLanguage}. Supported languages are: ${Object.keys(this.generators).join(', ')}`);
+      throw new Error(`Unsupported target language: ${targetLanguage}`);
     }
 
     // Parse PlantUML code to intermediate representation
     const classDiagram = this.parser.parse(plantUmlCode);
+
+    // DEBUGGING: Log what we found during parsing
+    console.log(`Transpiling to ${language}`);
+    console.log(`Found ${classDiagram.classes.length} classes`);
+    console.log(`Found ${classDiagram.interfaces.length} interfaces`);
+    console.log(`Found ${classDiagram.enums.length} enums`);
+    console.log(`Found ${classDiagram.relationships.length} relationships`);
 
     // Generate code for the target language
     return this.generators[language].generate(classDiagram);

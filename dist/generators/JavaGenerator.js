@@ -52,7 +52,7 @@ class JavaGenerator extends BaseGenerator {
       if (attr.isFinal) {
         code += 'final ';
       }
-      code += `${attr.type} ${attr.name};\n`;
+      code += `${this.mapJavaType(attr.type)} ${attr.name};\n`;
     }
     if (classObj.attributes.length > 0) {
       code += '\n';
@@ -65,7 +65,7 @@ class JavaGenerator extends BaseGenerator {
         code += this.indent(`${constructor.visibility} ${classObj.name}(`);
 
         // Parameters
-        code += constructor.parameters.map(param => `${param.type} ${param.name}`).join(', ');
+        code += constructor.parameters.map(param => `${this.mapJavaType(param.type)} ${param.name}`).join(', ');
         code += ') {\n';
 
         // Constructor body - may call super() if there's a parent
@@ -92,10 +92,12 @@ class JavaGenerator extends BaseGenerator {
 
       // Method documentation
       for (const param of method.parameters) {
-        code += this.indent(` * @param ${param.name} ${param.type} parameter\n`);
+        const mappedType = this.mapJavaType(param.type);
+        code += this.indent(this.generateEnhancedParamDoc(param.name, param.type, mappedType) + '\n');
       }
       if (method.returnType !== 'void') {
-        code += this.indent(` * @return ${method.returnType}\n`);
+        const mappedReturnType = this.mapJavaType(method.returnType);
+        code += this.indent(this.generateEnhancedReturnDoc(method.returnType, mappedReturnType) + '\n');
       }
       code += this.indent(' */\n');
 
@@ -107,10 +109,10 @@ class JavaGenerator extends BaseGenerator {
       if (method.isAbstract) {
         code += 'abstract ';
       }
-      code += `${method.returnType} ${method.name}(`;
+      code += `${this.mapJavaType(method.returnType)} ${method.name}(`;
 
       // Parameters
-      code += method.parameters.map(param => `${param.type} ${param.name}`).join(', ');
+      code += method.parameters.map(param => `${this.mapJavaType(param.type)} ${param.name}`).join(', ');
       code += ')';
 
       // Method body or semicolon
@@ -122,14 +124,16 @@ class JavaGenerator extends BaseGenerator {
 
         // Return statement for non-void methods
         if (method.returnType !== 'void') {
-          if (method.returnType === 'boolean') {
+          const mappedReturnType = this.mapJavaType(method.returnType);
+          const lowerMappedType = mappedReturnType.toLowerCase();
+          if (lowerMappedType === 'boolean') {
             code += this.indent('return false;\n', 2);
-          } else if (method.returnType === 'int' || method.returnType === 'long' || method.returnType === 'float' || method.returnType === 'double') {
+          } else if (['byte', 'short', 'int', 'long', 'float', 'double'].includes(lowerMappedType)) {
             code += this.indent('return 0;\n', 2);
-          } else if (method.returnType === 'char') {
+          } else if (lowerMappedType === 'char') {
             code += this.indent("return ' ';\n", 2);
-          } else if (method.returnType === 'byte' || method.returnType === 'short') {
-            code += this.indent('return 0;\n', 2);
+          } else if (lowerMappedType === 'string') {
+            code += this.indent('return "";\n', 2);
           } else {
             code += this.indent('return null;\n', 2);
           }
@@ -161,18 +165,20 @@ class JavaGenerator extends BaseGenerator {
 
       // Method documentation
       for (const param of method.parameters) {
-        code += this.indent(` * @param ${param.name} ${param.type} parameter\n`);
+        const mappedType = this.mapJavaType(param.type);
+        code += this.indent(this.generateEnhancedParamDoc(param.name, param.type, mappedType) + '\n');
       }
       if (method.returnType !== 'void') {
-        code += this.indent(` * @return ${method.returnType}\n`);
+        const mappedReturnType = this.mapJavaType(method.returnType);
+        code += this.indent(this.generateEnhancedReturnDoc(method.returnType, mappedReturnType) + '\n');
       }
       code += this.indent(' */\n');
 
       // Method signature - in Java interfaces, methods are implicitly public and abstract
-      code += this.indent(`${method.returnType} ${method.name}(`);
+      code += this.indent(`${this.mapJavaType(method.returnType)} ${method.name}(`);
 
       // Parameters
-      code += method.parameters.map(param => `${param.type} ${param.name}`).join(', ');
+      code += method.parameters.map(param => `${this.mapJavaType(param.type)} ${param.name}`).join(', ');
       code += ');\n\n';
     }
     code += '}\n\n';
@@ -193,6 +199,38 @@ class JavaGenerator extends BaseGenerator {
     }
     code += '}\n\n';
     return code;
+  }
+  mapJavaType(type) {
+    if (!type) return 'void';
+
+    // Handle complex generic types
+    if (this.isComplexGenericType(type)) {
+      // Extract the base type (e.g., "Map" from "Map<String, Integer>")
+      const baseType = this.extractBaseGenericType(type);
+
+      // Map common collection types
+      switch (baseType.toLowerCase()) {
+        case 'list':
+          return 'List<Object>';
+        case 'arraylist':
+          return 'ArrayList<Object>';
+        case 'map':
+        case 'hashmap':
+          return 'Map<Object, Object>';
+        case 'set':
+        case 'hashset':
+          return 'Set<Object>';
+        case 'collection':
+          return 'Collection<Object>';
+        case 'iterable':
+          return 'Iterable<Object>';
+        default:
+          return `${baseType}<Object>`;
+      }
+    }
+
+    // For simple types, return the type as is
+    return type;
   }
 }
 module.exports = JavaGenerator;

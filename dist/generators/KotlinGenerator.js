@@ -100,12 +100,14 @@ class KotlinGenerator extends BaseGenerator {
 
         // Method parameters documentation
         for (const param of method.parameters) {
-          code += this.indent(` * @param ${param.name} ${param.type} parameter\n`, 2);
+          const mappedType = this.mapKotlinType(param.type);
+          code += this.indent(this.generateEnhancedParamDoc(param.name, param.type, mappedType) + '\n', 2);
         }
 
         // Return type documentation
         if (method.returnType !== 'void' && method.returnType !== 'Unit') {
-          code += this.indent(` * @return ${method.returnType}\n`, 2);
+          const mappedReturnType = this.mapKotlinType(method.returnType);
+          code += this.indent(this.generateEnhancedReturnDoc(method.returnType, mappedReturnType) + '\n', 2);
         }
         code += this.indent(' */\n', 2);
 
@@ -121,11 +123,12 @@ class KotlinGenerator extends BaseGenerator {
 
         // Return statement for non-void methods
         if (method.returnType !== 'void' && method.returnType !== 'Unit') {
-          if (method.returnType === 'Boolean') {
+          const mappedReturnType = this.mapKotlinType(method.returnType);
+          if (mappedReturnType === 'Boolean') {
             code += this.indent('return false', 3) + '\n';
-          } else if (method.returnType === 'Int' || method.returnType === 'Long' || method.returnType === 'Float' || method.returnType === 'Double') {
+          } else if (['Int', 'Long', 'Float', 'Double'].includes(mappedReturnType)) {
             code += this.indent('return 0', 3) + '\n';
-          } else if (method.returnType === 'String') {
+          } else if (mappedReturnType === 'String') {
             code += this.indent('return ""', 3) + '\n';
           } else {
             code += this.indent('return null', 3) + '\n';
@@ -144,12 +147,14 @@ class KotlinGenerator extends BaseGenerator {
 
       // Method parameters documentation
       for (const param of method.parameters) {
-        code += this.indent(` * @param ${param.name} ${param.type} parameter\n`);
+        const mappedType = this.mapKotlinType(param.type);
+        code += this.indent(this.generateEnhancedParamDoc(param.name, param.type, mappedType) + '\n');
       }
 
       // Return type documentation
       if (method.returnType !== 'void' && method.returnType !== 'Unit') {
-        code += this.indent(` * @return ${method.returnType}\n`);
+        const mappedReturnType = this.mapKotlinType(method.returnType);
+        code += this.indent(this.generateEnhancedReturnDoc(method.returnType, mappedReturnType) + '\n');
       }
       code += this.indent(' */\n');
 
@@ -173,11 +178,12 @@ class KotlinGenerator extends BaseGenerator {
 
         // Return statement for non-void methods
         if (method.returnType !== 'void' && method.returnType !== 'Unit') {
-          if (method.returnType === 'Boolean') {
+          const mappedReturnType = this.mapKotlinType(method.returnType);
+          if (mappedReturnType === 'Boolean') {
             code += this.indent('return false', 2) + '\n';
-          } else if (method.returnType === 'Int' || method.returnType === 'Long' || method.returnType === 'Float' || method.returnType === 'Double') {
+          } else if (['Int', 'Long', 'Float', 'Double'].includes(mappedReturnType)) {
             code += this.indent('return 0', 2) + '\n';
-          } else if (method.returnType === 'String') {
+          } else if (mappedReturnType === 'String') {
             code += this.indent('return ""', 2) + '\n';
           } else {
             code += this.indent('return null', 2) + '\n';
@@ -211,12 +217,14 @@ class KotlinGenerator extends BaseGenerator {
 
       // Method parameters documentation
       for (const param of method.parameters) {
-        code += this.indent(` * @param ${param.name} ${param.type} parameter\n`);
+        const mappedType = this.mapKotlinType(param.type);
+        code += this.indent(this.generateEnhancedParamDoc(param.name, param.type, mappedType) + '\n');
       }
 
       // Return type documentation
       if (method.returnType !== 'void' && method.returnType !== 'Unit') {
-        code += this.indent(` * @return ${method.returnType}\n`);
+        const mappedReturnType = this.mapKotlinType(method.returnType);
+        code += this.indent(this.generateEnhancedReturnDoc(method.returnType, mappedReturnType) + '\n');
       }
       code += this.indent(' */\n');
 
@@ -261,6 +269,34 @@ class KotlinGenerator extends BaseGenerator {
   }
   mapKotlinType(type) {
     if (!type) return 'Unit';
+
+    // Handle complex generic types
+    if (this.isComplexGenericType(type)) {
+      // Extract the base type (e.g., "Map" from "Map<String, Integer>")
+      const baseType = this.extractBaseGenericType(type).toLowerCase();
+
+      // Map common collection types
+      switch (baseType) {
+        case 'list':
+          return 'List<Any>';
+        case 'arraylist':
+          return 'ArrayList<Any>';
+        case 'map':
+        case 'hashmap':
+          return 'Map<Any, Any>';
+        case 'set':
+        case 'hashset':
+          return 'Set<Any>';
+        case 'collection':
+          return 'Collection<Any>';
+        case 'iterable':
+          return 'Iterable<Any>';
+        default:
+          return `${baseType.charAt(0).toUpperCase() + baseType.slice(1)}<Any>`;
+      }
+    }
+
+    // Regular type mapping
     switch (type.toLowerCase()) {
       case 'boolean':
         return 'Boolean';

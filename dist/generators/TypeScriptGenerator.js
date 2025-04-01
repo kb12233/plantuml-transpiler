@@ -116,12 +116,14 @@ class TypeScriptGenerator extends BaseGenerator {
 
       // Method parameters documentation
       for (const param of method.parameters) {
-        code += this.indent(` * @param ${param.name} ${param.type} parameter\n`, 2);
+        const mappedType = this.mapTsType(param.type);
+        code += this.indent(this.generateEnhancedParamDoc(param.name, param.type, mappedType) + '\n', 2);
       }
 
       // Return type documentation
       if (method.returnType !== 'void') {
-        code += this.indent(` * @returns ${method.returnType}\n`, 2);
+        const mappedReturnType = this.mapTsType(method.returnType);
+        code += this.indent(this.generateEnhancedReturnDoc(method.returnType, mappedReturnType).replace('@return', '@returns') + '\n', 2);
       }
       code += this.indent(` */\n`, 2);
 
@@ -148,11 +150,12 @@ class TypeScriptGenerator extends BaseGenerator {
 
         // Return statement for non-void methods
         if (method.returnType !== 'void') {
-          if (method.returnType === 'boolean') {
+          const mappedReturnType = this.mapTsType(method.returnType);
+          if (mappedReturnType === 'boolean') {
             code += this.indent('return false;', 3) + '\n';
-          } else if (method.returnType === 'number') {
+          } else if (mappedReturnType === 'number') {
             code += this.indent('return 0;', 3) + '\n';
-          } else if (method.returnType === 'string') {
+          } else if (mappedReturnType === 'string') {
             code += this.indent('return "";', 3) + '\n';
           } else {
             code += this.indent('return null as any;', 3) + '\n';
@@ -189,12 +192,14 @@ class TypeScriptGenerator extends BaseGenerator {
 
       // Method parameters documentation
       for (const param of method.parameters) {
-        code += this.indent(` * @param ${param.name} ${param.type} parameter\n`, 2);
+        const mappedType = this.mapTsType(param.type);
+        code += this.indent(this.generateEnhancedParamDoc(param.name, param.type, mappedType) + '\n', 2);
       }
 
       // Return type documentation
       if (method.returnType !== 'void') {
-        code += this.indent(` * @returns ${method.returnType}\n`, 2);
+        const mappedReturnType = this.mapTsType(method.returnType);
+        code += this.indent(this.generateEnhancedReturnDoc(method.returnType, mappedReturnType).replace('@return', '@returns') + '\n', 2);
       }
       code += this.indent(` */\n`, 2);
 
@@ -245,6 +250,33 @@ class TypeScriptGenerator extends BaseGenerator {
   }
   mapTsType(type) {
     if (!type) return 'void';
+
+    // Handle complex generic types
+    if (this.isComplexGenericType(type)) {
+      // Extract the base type (e.g., "Map" from "Map<String, Integer>")
+      const baseType = this.extractBaseGenericType(type).toLowerCase();
+
+      // Map common collection types
+      switch (baseType) {
+        case 'list':
+        case 'arraylist':
+          return 'Array<any>';
+        case 'map':
+        case 'hashmap':
+          return 'Map<any, any>';
+        case 'set':
+        case 'hashset':
+          return 'Set<any>';
+        case 'collection':
+          return 'Array<any>';
+        case 'iterable':
+          return 'Iterable<any>';
+        default:
+          return `${baseType.charAt(0).toUpperCase() + baseType.slice(1)}<any>`;
+      }
+    }
+
+    // Regular type mapping
     switch (type.toLowerCase()) {
       case 'boolean':
         return 'boolean';

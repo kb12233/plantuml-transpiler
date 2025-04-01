@@ -86,11 +86,22 @@ class PythonGenerator extends BaseGenerator {
 
     // Methods
     for (const method of classObj.methods) {
+      // Add abstractmethod decorator before method definition if abstract
+      if (method.isAbstract) {
+        code += this.indent('@abstractmethod') + '\n';
+      }
+
+      // Add staticmethod decorator if static
+      if (method.isStatic) {
+        code += this.indent('@staticmethod') + '\n';
+      }
+
       // Method definition
-      code += this.indent('@staticmethod') + '\n' + this.indent('def ' + method.name + '(');
+      code += this.indent('def ' + method.name + '(');
 
       // Parameters
       const params = [];
+      // Only include 'self' parameter for instance methods (non-static)
       if (!method.isStatic) {
         params.push('self');
       }
@@ -107,35 +118,48 @@ class PythonGenerator extends BaseGenerator {
       if (method.parameters.length > 0) {
         code += this.indent('Args:', 2) + '\n';
         for (const param of method.parameters) {
-          code += this.indent('    ' + param.name + ': A ' + param.type, 2) + '\n';
+          const mappedType = this.mapPythonType(param.type);
+          if (this.isComplexGenericType(param.type)) {
+            code += this.indent(`    ${param.name}: A ${mappedType} (original type: ${param.type})`, 2) + '\n';
+          } else {
+            code += this.indent(`    ${param.name}: A ${param.type}`, 2) + '\n';
+          }
         }
       }
 
       // Method docstring return value
       if (method.returnType !== 'void' && method.returnType !== 'None') {
-        code += this.indent('Returns:', 2) + '\n';
-        code += this.indent('    ' + method.returnType, 2) + '\n';
+        const mappedReturnType = this.mapPythonType(method.returnType);
+        if (this.isComplexGenericType(method.returnType)) {
+          code += this.indent('Returns:', 2) + '\n';
+          code += this.indent(`    ${mappedReturnType} (original type: ${method.returnType})`, 2) + '\n';
+        } else {
+          code += this.indent('Returns:', 2) + '\n';
+          code += this.indent(`    ${method.returnType}`, 2) + '\n';
+        }
       }
       code += this.indent('"""', 2) + '\n';
 
       // Method body
       if (method.isAbstract) {
-        code += this.indent('@abstractmethod', 2) + '\n';
         code += this.indent('pass', 2) + '\n\n';
       } else {
         code += this.indent('# TODO: Implement method', 2) + '\n';
 
         // Return statement for non-void methods
         if (method.returnType !== 'void' && method.returnType !== 'None') {
-          if (method.returnType === 'bool' || method.returnType === 'boolean') {
+          const mappedReturnType = this.mapPythonType(method.returnType);
+          if (mappedReturnType === 'bool') {
             code += this.indent('return False', 2) + '\n\n';
-          } else if (method.returnType === 'int' || method.returnType === 'long' || method.returnType === 'float' || method.returnType === 'double') {
+          } else if (['int', 'float'].includes(mappedReturnType)) {
             code += this.indent('return 0', 2) + '\n\n';
-          } else if (method.returnType === 'str' || method.returnType === 'string') {
+          } else if (mappedReturnType === 'str') {
             code += this.indent('return ""', 2) + '\n\n';
           } else {
             code += this.indent('return None', 2) + '\n\n';
           }
+        } else {
+          code += '\n';
         }
       }
     }
@@ -155,6 +179,9 @@ class PythonGenerator extends BaseGenerator {
 
     // Methods
     for (const method of interfaceObj.methods) {
+      // Add abstractmethod decorator before method definition
+      code += this.indent('@abstractmethod') + '\n';
+
       // Method definition
       code += this.indent('def ' + method.name + '(self');
 
@@ -171,19 +198,27 @@ class PythonGenerator extends BaseGenerator {
       if (method.parameters.length > 0) {
         code += this.indent('Args:', 2) + '\n';
         for (const param of method.parameters) {
-          code += this.indent(`    ${param.name}: A ${param.type}`, 2) + '\n';
+          const mappedType = this.mapPythonType(param.type);
+          if (this.isComplexGenericType(param.type)) {
+            code += this.indent(`    ${param.name}: A ${mappedType} (original type: ${param.type})`, 2) + '\n';
+          } else {
+            code += this.indent(`    ${param.name}: A ${param.type}`, 2) + '\n';
+          }
         }
       }
 
       // Method docstring return value
       if (method.returnType !== 'void' && method.returnType !== 'None') {
-        code += this.indent('Returns:', 2) + '\n';
-        code += this.indent('    ' + method.returnType, 2) + '\n';
+        const mappedReturnType = this.mapPythonType(method.returnType);
+        if (this.isComplexGenericType(method.returnType)) {
+          code += this.indent('Returns:', 2) + '\n';
+          code += this.indent(`    ${mappedReturnType} (original type: ${method.returnType})`, 2) + '\n';
+        } else {
+          code += this.indent('Returns:', 2) + '\n';
+          code += this.indent(`    ${method.returnType}`, 2) + '\n';
+        }
       }
       code += this.indent('"""', 2) + '\n';
-
-      // Abstract method
-      code += this.indent('@abstractmethod', 2) + '\n';
       code += this.indent('pass', 2) + '\n\n';
     }
     if (code.endsWith('\n\n')) {
@@ -212,6 +247,35 @@ class PythonGenerator extends BaseGenerator {
   }
   mapPythonType(type) {
     if (!type) return 'None';
+
+    // Handle complex generic types
+    if (this.isComplexGenericType(type)) {
+      // Extract the base type (e.g., "Map" from "Map<String, Integer>")
+      const baseType = this.extractBaseGenericType(type).toLowerCase();
+
+      // Map common collection types
+      switch (baseType) {
+        case 'list':
+          return 'List[Any]';
+        case 'arraylist':
+          return 'List[Any]';
+        case 'map':
+        case 'hashmap':
+          return 'Dict[Any, Any]';
+        case 'set':
+        case 'hashset':
+          return 'Set[Any]';
+        case 'collection':
+          return 'List[Any]';
+        case 'iterable':
+          return 'Iterable[Any]';
+        default:
+          return 'Any';
+        // For unknown generic types
+      }
+    }
+
+    // Regular mapping
     switch (type.toLowerCase()) {
       case 'boolean':
         return 'bool';

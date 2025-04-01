@@ -33,7 +33,8 @@ class BaseGenerator {
       }
 
       // Generate entities without a package
-      this.generateEntitiesWithoutPackage(classDiagram, code);
+      // BUG FIX: We need to set code equal to the result of this function
+      code = this.generateEntitiesWithoutPackage(classDiagram, code);
     } else {
       // Generate all entities regardless of package
       for (const classObj of classDiagram.classes) {
@@ -120,6 +121,54 @@ class BaseGenerator {
   indent(code, level = 1) {
     const indent = ' '.repeat(this.indentSize * level);
     return code.split('\n').map(line => line ? indent + line : line).join('\n');
+  }
+
+  /**
+   * Determines if a type is a complex generic type (contains angle brackets)
+   * @param {string} type - The type to check
+   * @returns {boolean} - True if the type is a complex generic
+   */
+  isComplexGenericType(type) {
+    return type && type.includes('<') && type.includes('>');
+  }
+
+  /**
+   * Extracts the base type from a complex generic type
+   * @param {string} type - The complex generic type
+   * @returns {string} - The base type
+   */
+  extractBaseGenericType(type) {
+    if (!this.isComplexGenericType(type)) {
+      return type;
+    }
+    return type.split('<')[0].trim();
+  }
+
+  /**
+   * Enhances documentation for a parameter with its original complex type
+   * @param {string} paramName - The parameter name
+   * @param {string} paramType - The parameter type
+   * @param {string} mappedType - The mapped parameter type
+   * @returns {string} - Documentation string
+   */
+  generateEnhancedParamDoc(paramName, paramType, mappedType) {
+    if (this.isComplexGenericType(paramType)) {
+      return ` * @param ${paramName} ${mappedType} parameter (original type: ${paramType})`;
+    }
+    return ` * @param ${paramName} ${paramType} parameter`;
+  }
+
+  /**
+   * Enhances documentation for a return type with its original complex type
+   * @param {string} returnType - The return type
+   * @param {string} mappedType - The mapped return type
+   * @returns {string} - Documentation string
+   */
+  generateEnhancedReturnDoc(returnType, mappedType) {
+    if (this.isComplexGenericType(returnType)) {
+      return ` * @return ${mappedType} (original type: ${returnType})`;
+    }
+    return ` * @return ${returnType}`;
   }
 }
 module.exports = BaseGenerator;
